@@ -496,11 +496,70 @@
 		}
 
 		/* 9. mandatory appendix merge (fatal on failure - a policy is
-		   never streamed without its notices); the receipt carries none */
+		   never streamed without its notices); the receipt carries none.
+
+		   The Privacy Clause is not a static PDF in the legacy EASC app - it
+		   is the JSP include pop_incl_CFMKT.jsp. Rather than merge a
+		   Privacy_Clause.pdf that does not exist, loop back to
+		   pop_fwcms_privacy_clause_print.jsp (same GRAB pattern as the
+		   document template above), rasterise it with the Liberty letterhead,
+		   and hand the rendered PDF to mergeAppendix so it takes the Privacy
+		   Clause slot. A render hiccup is non-fatal - mergeAppendix then
+		   falls back to the static Privacy_Clause.pdf. */
 		if (appendixRequired)
 		{
-			log(UUID, DOC, "appendix", "merging mandatory appendix (CUT_OFF=" + CUT_OFF + ") into " + mergedFile);
-			FWCMSOnline.mergeAppendix(mergedFile, temp_banner_path, CUT_OFF);
+			String privacyClausePdf = "";
+			try
+			{
+				String pcData  = URLEncoder.encode("TYPE") + "=" + URLEncoder.encode("GRAB");
+				pcData += "&" + URLEncoder.encode("UUID") + "=" + URLEncoder.encode(UUID);
+
+				String pcURL = server_root + request.getContextPath()
+					+ "/bestinet_online/template/pop_fwcms_privacy_clause_print.jsp?option=print";
+				log(UUID, DOC, "appendix", "Privacy Clause loopback POST to " + pcURL + " body=[" + pcData + "]");
+
+				URL urlPC = new URL(pcURL);
+				URLConnection connPC = urlPC.openConnection();
+				connPC.setDoOutput(true);
+				OutputStreamWriter wrPC = new OutputStreamWriter(connPC.getOutputStream());
+				wrPC.write(pcData);
+				wrPC.flush();
+
+				BufferedReader rdPC = new BufferedReader(new InputStreamReader(connPC.getInputStream()));
+				StringBuffer pcResults = new StringBuffer();
+				String pcLine;
+				while ((pcLine = rdPC.readLine()) != null)
+				{
+					pcResults.append(pcLine);
+				}
+				wrPC.close();
+				rdPC.close();
+
+				String pcHTML = FWCMSOnline.normaliseFontSizes(pcResults.toString());
+				String pcLower = pcHTML.toLowerCase();
+				boolean pcLooksLikeError = pcLower.indexOf("document reference is missing") != -1
+					|| pcLower.indexOf("login") != -1 || pcLower.indexOf("logout") != -1;
+				log(UUID, DOC, "appendix", "Privacy Clause loopback htmlLength=" + pcHTML.length()
+					+ " looksLikeErrorOrRedirect=" + pcLooksLikeError);
+
+				/* letterhead header + blank footers, matching the guarantee
+				   letter's first-page treatment (logo_height=80) */
+				RP_html2pdf.generateHtml_custom_footer2(baseName + "-PC.pdf", pcHTML,
+					"english","PORTRAIT",FWCMSOnline.buildHeaderHTML3(),"",
+					FWCMSOnline.buildFooterBlank(),FWCMSOnline.buildFooterBlank(),"80","60","30");
+				privacyClausePdf = TEMP_PATH + "/" + baseName + "-PC.pdf";
+				log(UUID, DOC, "appendix", "Privacy Clause rendered from JSP to " + privacyClausePdf);
+			}
+			catch (Exception pcEx)
+			{
+				log(UUID, DOC, "appendix", "Privacy Clause JSP render FAILED (" + pcEx
+					+ "); mergeAppendix will fall back to the static Privacy_Clause.pdf");
+				privacyClausePdf = "";
+			}
+
+			log(UUID, DOC, "appendix", "merging mandatory appendix (CUT_OFF=" + CUT_OFF + ") into " + mergedFile
+				+ " privacyClausePdf=[" + privacyClausePdf + "]");
+			FWCMSOnline.mergeAppendix(mergedFile, temp_banner_path, CUT_OFF, privacyClausePdf);
 			log(UUID, DOC, "appendix", "appendix merge done");
 		}
 	}

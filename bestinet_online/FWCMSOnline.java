@@ -1669,8 +1669,21 @@ public class FWCMSOnline extends DB_Contact{
 	   Re-opens are idempotent via the FWCMS_APPENDIX_MERGED metadata
 	   stamp, mirroring getPdf2.jsp. The merge is fatal by requirement:
 	   any missing appendix or merge failure throws so a policy is never
-	   streamed without its notices. */
+	   streamed without its notices.
+
+	   The Privacy Clause is NOT a static file in the legacy EASC app - it
+	   is the JSP include pop_incl_CFMKT.jsp, rendered to PDF at print time.
+	   gen_fwcms_pdf.jsp loops back to pop_fwcms_privacy_clause_print.jsp and
+	   passes the rendered PDF here as privacyClausePdf; when that file is
+	   supplied and readable it takes the Privacy Clause slot, so the clause
+	   comes from the JSP rather than a Privacy_Clause.pdf that does not
+	   exist. Passing null / "" (or a missing file) falls back to the static
+	   APPENDIX_PRIVACY_CLAUSE, keeping the old behaviour available. */
 	public void mergeAppendix(String filename, String bannerPath, String cutOff) throws Exception{
+		mergeAppendix(filename, bannerPath, cutOff, null);
+	}
+
+	public void mergeAppendix(String filename, String bannerPath, String cutOff, String privacyClausePdf) throws Exception{
 
 		if (cutOff == null) cutOff = "";
 		cutOff = cutOff.trim().toUpperCase();
@@ -1704,7 +1717,20 @@ public class FWCMSOnline extends DB_Contact{
 
 		String[] appendix = new String[4];
 		appendix[0] = bannerPath + "/" + APPENDIX_IMPORTANT_NOTICE;
-		appendix[1] = bannerPath + "/" + APPENDIX_PRIVACY_CLAUSE;
+		/* Privacy Clause: prefer the JSP-rendered PDF (pop_incl_CFMKT.jsp /
+		   pop_fwcms_privacy_clause_print.jsp); fall back to the static file
+		   only when no rendered PDF was supplied or it is unreadable. */
+		if (privacyClausePdf != null && !privacyClausePdf.trim().equals("")
+			&& new File(privacyClausePdf).exists()){
+			appendix[1] = privacyClausePdf;
+			System.out.println("[FWCMSPRINT] mergeAppendix: Privacy Clause from JSP-rendered PDF ["
+				+ privacyClausePdf + "]");
+		}else{
+			appendix[1] = bannerPath + "/" + APPENDIX_PRIVACY_CLAUSE;
+			System.out.println("[FWCMSPRINT] mergeAppendix: Privacy Clause from static file ["
+				+ appendix[1] + "] (no JSP-rendered PDF supplied"
+				+ (privacyClausePdf == null ? "" : " or [" + privacyClausePdf + "] missing") + ")");
+		}
 		if (cutOff.equals("OLD")){
 			appendix[2] = bannerPath + "/" + APPENDIX_PRIVACY_ENG_OLD;
 			appendix[3] = bannerPath + "/" + APPENDIX_PRIVACY_BM_OLD;
