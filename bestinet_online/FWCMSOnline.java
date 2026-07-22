@@ -2099,14 +2099,25 @@ public class FWCMSOnline extends DB_Contact{
 		mergeAppendix(filename, bannerPath, cutOff, privacyClausePdf, true);
 	}
 
+	public void mergeAppendix(String filename, String bannerPath, String cutOff, String privacyClausePdf,
+			boolean includeImportantNotice) throws Exception{
+		mergeAppendix(filename, bannerPath, cutOff, privacyClausePdf, null, includeImportantNotice);
+	}
+
 	/* includeImportantNotice=false drops the Important Notice from the front
 	   of the appendix. The FWIG Guarantee Letter does NOT carry the Important
 	   Notice (it is a guarantee to Immigration, not a policy sold to the
 	   employer), so gen_fwcms_pdf.jsp passes false for FWIG_GL; the policy
 	   schedules (FWIG_SCH / FWHS_SCH) pass true and keep it. The Privacy
-	   Clause / Privacy Notice (Eng) / Privacy Notice (BM) always follow. */
+	   Clause / Privacy Notice (Eng) / Privacy Notice (BM) always follow.
+
+	   importantNoticePdf, when supplied and readable, takes the Important
+	   Notice slot from the JSP-rendered PDF (gen_fwcms_pdf.jsp) rather than
+	   the static APPENDIX_IMPORTANT_NOTICE. Passing null / "" (or a missing
+	   file) falls back to the static banner file, keeping the old behaviour
+	   available for callers on the shorter overloads. */
 	public void mergeAppendix(String filename, String bannerPath, String cutOff, String privacyClausePdf,
-			boolean includeImportantNotice) throws Exception{
+			String importantNoticePdf, boolean includeImportantNotice) throws Exception{
 
 		if (cutOff == null) cutOff = "";
 		cutOff = cutOff.trim().toUpperCase();
@@ -2142,7 +2153,21 @@ public class FWCMSOnline extends DB_Contact{
 		/* Important Notice — first in the appendix, but only when the caller
 		   wants it (the Guarantee Letter omits it). */
 		if (includeImportantNotice){
-			appendixList.add(bannerPath + "/" + APPENDIX_IMPORTANT_NOTICE);
+			/* Important Notice: prefer the JSP-rendered PDF; fall back to the
+			   static banner file only when no rendered PDF was supplied or it
+			   is unreadable. */
+			if (importantNoticePdf != null && !importantNoticePdf.trim().equals("")
+				&& new File(importantNoticePdf).exists()){
+				appendixList.add(importantNoticePdf);
+				System.out.println("[FWCMSPRINT] mergeAppendix: Important Notice from JSP-rendered PDF ["
+					+ importantNoticePdf + "]");
+			}else{
+				String staticNotice = bannerPath + "/" + APPENDIX_IMPORTANT_NOTICE;
+				appendixList.add(staticNotice);
+				System.out.println("[FWCMSPRINT] mergeAppendix: Important Notice from static file ["
+					+ staticNotice + "] (no JSP-rendered PDF supplied"
+					+ (importantNoticePdf == null ? "" : " or [" + importantNoticePdf + "] missing") + ")");
+			}
 		}else{
 			System.out.println("[FWCMSPRINT] mergeAppendix: Important Notice OMITTED (includeImportantNotice=false)");
 		}
