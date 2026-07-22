@@ -64,11 +64,15 @@ System.out.println(_sb.toString());
                        'ISSUED' once every product is issued
                        (updateFWCMSONLINETRANSStatus)
 
-       The guarantee letter still renders from the online-portal tables
-       (TB_FWCMS_ONLINE / _DTL / _WORKER — see FWCMSOnline.
-       getFWIGGLPrintDataOnline); issuance now also lands the matching
-       class-table rows the other FWCMS documents read. PAYMENT=F still
-       previews the failed state without stamping anything.
+       EVERY FWCMS document — the FWIG Guarantee Letter included — now
+       renders from the MAIN class tables (TB_FWIGCN / TB_FWIGSCH /
+       TB_FWIGMAST, TB_FWHSCN / …) via FWCMSOnline.getFWIGPrintData /
+       getFWHSPrintData, exactly like the legacy eCover previews; the
+       online DTL row supplies only the UUID -> CNCODE linkage. So a
+       product left on the MCK- mock fallback has NO class-table rows and
+       will NOT print — real main-table issuance is a hard prerequisite
+       for the print buttons below. PAYMENT=F still previews the failed
+       state without stamping anything.
        [REMOVE when the payment gateway callback lands: restore
        isSuccess = "Y".equalsIgnoreCase(request.getParameter("PAYMENT"))
        and let the gateway callback supply the payment stamp. The MOCKPAY-
@@ -152,6 +156,65 @@ System.out.println(_sb.toString());
         {
             FWCMSOnline.takeDown();
         }
+    }
+
+    /* ── Issued Policies (MAIN class tables) ────────────────────────
+       The table below shows the real issued documents. The online DTL
+       rows are read ONLY for the UUID -> per-product CNCODE linkage;
+       the displayed cover note / policy number / period of cover come
+       from the class tables through the same getFWIGPrintData /
+       getFWHSPrintData reads the printing module renders from — so a
+       product only appears here when it is actually printable. */
+    java.util.ArrayList alPolicies = new java.util.ArrayList();
+    if (isSuccess && !FWCMS_UUID.equals(""))
+    {
+        java.text.SimpleDateFormat fmtDb   = new java.text.SimpleDateFormat("yyyyMMdd");
+        java.text.SimpleDateFormat fmtDisp = new java.text.SimpleDateFormat("dd MMM yyyy");
+        try
+        {
+            FWCMSOnline.makeConnection();
+            java.util.ArrayList alDTL2 = FWCMSOnline.getFWCMSONLINEDTLList(FWCMS_UUID);
+            for (int iP = 0; iP < alDTL2.size(); iP++)
+            {
+                java.util.Hashtable htDTL2 = (java.util.Hashtable) alDTL2.get(iP);
+                String sInsType2 = common.setNullToString((String) htDTL2.get("INSURANCE_TYPE"));
+                String sUkey2    = common.setNullToString((String) htDTL2.get("CNCODE"));
+                if (sUkey2.equals("") || sUkey2.startsWith("MCK")) continue;
+
+                java.util.Hashtable htPol = sInsType2.equals("I")
+                    ? FWCMSOnline.getFWIGPrintData(sUkey2)
+                    : FWCMSOnline.getFWHSPrintData(sUkey2);
+                if (htPol == null || common.setNullToString((String)htPol.get("PRINCIPLE")).equals("")) continue;
+
+                String sPeriod = "";
+                try
+                {
+                    String sEff = common.setNullToString((String)htPol.get("EFFDATE"));
+                    String sExp = common.setNullToString((String)htPol.get("EXPDATE"));
+                    if (!sEff.equals("") && !sExp.equals(""))
+                        sPeriod = fmtDisp.format(fmtDb.parse(sEff)) + " – " + fmtDisp.format(fmtDb.parse(sExp));
+                }
+                catch (Exception exP) {}
+
+                java.util.Hashtable htRow = new java.util.Hashtable();
+                htRow.put("CLASS",  sInsType2.equals("I") ? "FWIG" : "FWHS");
+                htRow.put("CNCODE", common.setNullToString((String)htPol.get("CNCODE")));
+                htRow.put("POLNO",  common.setNullToString((String)htPol.get("POLNO")));
+                htRow.put("PERIOD", sPeriod);
+                alPolicies.add(htRow);
+            }
+        }
+        catch (Exception ex)
+        {
+            System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID + " stage=issued-policies-load FAILED: " + ex);
+            ex.printStackTrace();
+        }
+        finally
+        {
+            FWCMSOnline.takeDown();
+        }
+        System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID + " stage=issued-policies-load - "
+            + alPolicies.size() + " printable class-table polic(y/ies) found");
     }
 %>
 <!DOCTYPE html>
@@ -262,40 +325,44 @@ System.out.println(_sb.toString());
                                 </tr>
                             </thead>
                             <tbody>
+                            <%-- rows come from the MAIN class tables (see the
+                                 issued-policies load above) — one per issued
+                                 product, none when issuance has not landed --%>
+                            <% if (alPolicies.size() == 0) { %>
+                                <tr>
+                                    <td colspan="4" style="text-align:center;color:var(--c-muted);font-size:.82rem;padding:1.1rem;">
+                                        Policy documents are not available yet — the policy has not been issued. Please try again later.
+                                    </td>
+                                </tr>
+                            <% } %>
+                            <% for (int iP = 0; iP < alPolicies.size(); iP++) {
+                                   java.util.Hashtable htRow = (java.util.Hashtable) alPolicies.get(iP);
+                                   String sClass  = (String) htRow.get("CLASS");
+                                   String sCncode = (String) htRow.get("CNCODE");
+                                   String sPolno  = (String) htRow.get("POLNO");
+                                   String sPeriod = (String) htRow.get("PERIOD");
+                                   boolean isFwig = sClass.equals("FWIG");
+                            %>
                                 <tr>
                                     <td>
-                                        <span class="lb-class-badge fwhs">
-                                            <i class="bi bi-heart-pulse-fill"></i> FWHS
+                                        <span class="lb-class-badge <%= isFwig ? "fwig" : "fwhs" %>">
+                                            <i class="bi <%= isFwig ? "bi-shield-fill" : "bi-heart-pulse-fill" %>"></i> <%= sClass %>
                                         </span>
                                     </td>
                                     <td>
-                                        <span class="lb-policy-no">H5411056</span>
-                                        <span style="font-size:.72rem;color:var(--c-muted);margin-left:.35rem;">(RH000626)</span>
+                                        <span class="lb-policy-no"><%= common.stringToHTMLString(sPolno.equals("") ? sCncode : sPolno) %></span>
+                                        <% if (!sPolno.equals("") && !sCncode.equals("")) { %>
+                                        <span style="font-size:.72rem;color:var(--c-muted);margin-left:.35rem;">(<%= common.stringToHTMLString(sCncode) %>)</span>
+                                        <% } %>
                                     </td>
-                                    <td>25 Jun 2026 – 24 Jun 2027</td>
+                                    <td><%= common.stringToHTMLString(sPeriod) %></td>
                                     <td>
-                                        <button class="lb-tbl-btn" onclick="printPolicy('FWHS')">
+                                        <button class="lb-tbl-btn" onclick="printPolicy('<%= sClass %>')">
                                             <i class="bi bi-printer-fill"></i> Print
                                         </button>
                                     </td>
                                 </tr>
-                                <tr>
-                                    <td>
-                                        <span class="lb-class-badge fwig">
-                                            <i class="bi bi-shield-fill"></i> FWIG
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="lb-policy-no">G2511034</span>
-                                        <span style="font-size:.72rem;color:var(--c-muted);margin-left:.35rem;">(RG000419)</span>
-                                    </td>
-                                    <td>25 Jun 2026 – 24 Jun 2027</td>
-                                    <td>
-                                        <button class="lb-tbl-btn" onclick="printPolicy('FWIG')">
-                                            <i class="bi bi-printer-fill"></i> Print
-                                        </button>
-                                    </td>
-                                </tr>
+                            <% } %>
                             </tbody>
                         </table>
                     </div>
