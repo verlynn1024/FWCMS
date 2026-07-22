@@ -1,7 +1,8 @@
 # FWCMS Main-Table Integration — Bestinet Online Portal
 
-**Status:** implemented (issuance wired into the payment-result flow, with a mock
-fallback for environments where the cover-note series is not yet seeded).
+**Status:** implemented (issuance runs **before** the payment gateway, on the
+payment page, with a mock fallback for environments where the cover-note series
+is not yet seeded).
 
 ## 1. The problem this solves
 
@@ -103,12 +104,20 @@ FWCMS → eCover
   Check split policy
   Calculate premium
   Display premium
-  ── (payment confirmed) ──────────────────────────────
-  Insert into existing MAIN tables   ◄── NEW
+  ── (payment page, BEFORE the gateway) ───────────────
+  Insert into existing MAIN tables   ◄── NEW (pre-payment)
   Insert XML transaction records     ◄── (online DTL stamped with real CN)
   Generate cover note                ◄── real CNCODE / POLNO
-  Proceed to printing                ◄── now reads a real class-table policy
+  ── (redirect to payment gateway) ────────────────────
+  ── (payment confirmed, result page) ─────────────────
+  Stamp payment PAID + close journey ISSUED
+  Proceed to printing                ◄── reads a real class-table policy
 ```
+
+This ordering matches the legacy eCover flow, where "Save cover note" (the
+class-table insert) precedes payment. The database insertion is therefore done
+**before** the user enters the payment gateway; the result page only confirms
+the payment leg and closes the journey.
 
 ### Controller: `FWCMSOnline` (thin)
 
@@ -133,14 +142,24 @@ public String issueMainTables(String UUID, String INSTYPE, String USERID)
 4. stamps the generated `CNCODE` / `POLNO` back onto the online DTL row via
    `updateFWCMSONLINEDTLIssued`, preserving the `UUID` linkage.
 
-### Entry point: `pop_fwcms_payment_result.jsp`
+### Entry point: `pop_fwcms_payment.jsp` (before the gateway)
 
-After payment succeeds, the page loops the journey's products and calls
-`FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)` per product. On success the
-printing module has a real policy to render. If issuance throws (e.g. the
+On the payment page — before the user is redirected to the payment gateway — the
+page loops the journey's products and calls
+`FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)` per product. The loop is
+idempotent (products already issued with a real, non-`MCK` cover note are
+skipped), so reloading or retrying the payment page never re-inserts. On success
+the printing module has a real policy to render. If issuance throws (e.g. the
 cover-note series is not seeded in this environment), the product falls back to
 the previous `MCK…` mock stamp so the portal still renders — the `MCK` prefix
 makes fallbacks easy to find and purge.
+
+### Result page: `pop_fwcms_payment_result.jsp` (after the gateway)
+
+The result page no longer inserts into the class tables. Once the (mocked)
+gateway confirms the payment, it only stamps the payment leg PAID
+(`updateFWCMSONLINETRANSPayment`) and closes the journey Success/ISSUED
+(`updateFWCMSONLINETRANSStatus`).
 
 ### Supporting change: `pop_fwcms_capturePremium.jsp`
 
@@ -162,7 +181,7 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
    DB_FWIG / DB_FWHS                           TB_FWCMS_ONLINE_DTL  (tracking)
         │                                       TB_FWCMS_ONLINE_WORKER (tracking)
         │                                          │
-        │                                     payment_result.jsp
+        │                                     payment.jsp (BEFORE gateway)
         │                                       FWCMSOnline.issueMainTables()
         │                                          │  (controller)
         ▼                                          ▼  delegates to beans
@@ -179,6 +198,11 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
   TB_FWHSCN / TB_FWHSSCH / TB_FWHSITEM              │
   TB_TRANSACTION                                    ▼
         │                              updateFWCMSONLINEDTLIssued (real CN/POLNO)
+        │                                            │
+        │                                     ── payment gateway ──
+        │                                            │
+        │                                     payment_result.jsp (AFTER gateway)
+        │                                       PAID stamp + journey ISSUED
         ▼                                            │
    Printing / Enquiry / Cancellation / Endorsement / Reporting
    (both flows now converge on the same class tables)

@@ -1,17 +1,88 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8"%>
 <jsp:useBean id="common" scope="page" class="com.rexit.easc.common" />
+<jsp:useBean id="FWCMSOnline" scope="page" class="com.rexit.easc.FWCMSOnline" />
 <%
     String SESUSERID	= common.setNullToString((String)session.getAttribute("SESUSERID"));
-	String SESBRUSERID	= common.setNullToString((String)session.getAttribute("SESBRUSERID")); 
-	
+	String SESBRUSERID	= common.setNullToString((String)session.getAttribute("SESBRUSERID"));
+
  	String USERID		= common.setNullToString((String)session.getAttribute("SESUSERID"));
 	String CONTACT_ID       = common.setNullToString((String) session.getAttribute("SES_CONTACT_ID"));
- 
-    if ((SESUSERID.equals("")) || (SESUSERID == null)) 
+
+    if ((SESUSERID.equals("")) || (SESUSERID == null))
     {
-		response.sendRedirect("../login/logout.jsp"); 
+		response.sendRedirect("../login/logout.jsp");
     }
-    
+
+    /* ── Database insertion BEFORE the payment gateway ──────────────
+       The policy is issued into the FWCMS MAIN class tables here, on the
+       payment page, BEFORE the user is redirected to the payment gateway —
+       mirroring the legacy eCover flow, where "Save cover note" (the class-
+       table insert) precedes payment. Each product in the journey is inserted
+       via FWCMSOnline.issueMainTables, which reuses the legacy DB_FWIG /
+       DB_FWHS DAOs, generates the real cover note / policy number and stamps
+       it back onto the online DTL row. This is idempotent: rows already issued
+       with a real (non-MCK) cover note are skipped, so reloading or retrying
+       the payment page never re-inserts. If issuance throws (e.g. the cover-
+       note series is not seeded in this environment yet) the product falls
+       back to a mock MCK- stamp so the portal still renders.
+
+       The payment leg (PAID stamp) and the journey close (TRANS_STATUS='S' /
+       PURCHASE_STATUS='ISSUED') are NOT done here — they remain in
+       pop_fwcms_payment_result.jsp and are applied only after the gateway
+       confirms the payment. */
+    String FWCMS_UUID = common.setNullToString((String)session.getAttribute("SES_FWCMS_ONLINE_UUID"));
+    if (!FWCMS_UUID.equals(""))
+    {
+        try
+        {
+            FWCMSOnline.makeConnection();
+            java.util.Hashtable htTXN = FWCMSOnline.getFWCMSONLINETRANS(FWCMS_UUID);
+            if (htTXN != null)
+            {
+                String sMockIssDate = new java.text.SimpleDateFormat("yyyyMMdd").format(new java.util.Date());
+                String sMockSuffix  = new java.text.SimpleDateFormat("yyMMddHHmmss").format(new java.util.Date());
+                java.util.ArrayList alDTL = FWCMSOnline.getFWCMSONLINEDTLList(FWCMS_UUID);
+                for (int iD = 0; iD < alDTL.size(); iD++)
+                {
+                    java.util.Hashtable htDTL = (java.util.Hashtable) alDTL.get(iD);
+                    String sInsType = (String) htDTL.get("INSURANCE_TYPE");
+                    String sCNCODE  = common.setNullToString((String) htDTL.get("CNCODE"));
+                    boolean alreadyIssued = "ISSUED".equals((String) htDTL.get("INS_STATUS"))
+                        && !sCNCODE.equals("") && !sCNCODE.startsWith("MCK");
+                    if (alreadyIssued) continue;
+
+                    try
+                    {
+                        String sResult = FWCMSOnline.issueMainTables(FWCMS_UUID, sInsType, SESUSERID);
+                        System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID
+                            + " stage=pre-payment-main-table-issuance INSTYPE=" + sInsType
+                            + " issued CN/POLNO=" + sResult);
+                    }
+                    catch (Exception exIssue)
+                    {
+                        System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID
+                            + " stage=pre-payment-main-table-issuance INSTYPE=" + sInsType
+                            + " FAILED - falling back to mock stamp: " + exIssue.getMessage());
+                        exIssue.printStackTrace();
+                        FWCMSOnline.updateFWCMSONLINEDTLIssued(
+                            "MCK" + sInsType + sMockSuffix,          /* mock CNCODE    */
+                            "MCKPOL" + sInsType + sMockSuffix,       /* mock POLICY_NO */
+                            sMockIssDate, SESUSERID, FWCMS_UUID, sInsType);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID + " stage=pre-payment-issuance FAILED");
+            ex.printStackTrace();
+        }
+        finally
+        {
+            FWCMSOnline.takeDown();
+        }
+    }
+
     /* ── Payment result flag ────────────────────────────────────
        Gateway posts back PAYMENT=Y on approval, PAYMENT=F on decline.
        Default to failure so a missing param never shows a false positive. */
