@@ -2069,18 +2069,22 @@ public class FWCMSOnline extends DB_Contact{
 			logIns(CNCODE, "TB_TRANSACTION", dbFWIG.insert_transaction("IG", "CN", USERID, ISSDATE, CONTACTID,
 					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dTot, CNCODE, "", "", USERID));
 
+			/* Same width guard as FWHS: TB_FWIGCN STATE(20)/TEL_NO_OFFICE(20)/
+			   CONTACTID(20) and BUSINESS_NO(25) are narrower than the portal's
+			   30-char EMPLOYER_STATE/PHONE/ROC, so fit them to avoid SQLCODE
+			   -302 / SQLSTATE 22001. NAME/ADDRESS/OCCUPATION_DESC are 255. */
 			logIns(CNCODE, "TB_FWIGCN", dbFWIG.Insert_FWIGCN(
 					UKEY, CNCODE, POLNO, USERID, ISSUE_PRINCIPLE, ACCODE, USERID, "",
 					"", "F", "N", ISSDATE, EFFDATE, EXPDATE, NOMONTH, CNTIME, "",
 					"", "", nz((String) txn.get("EMPLOYER_NAME")), "",
 					nz((String) txn.get("EMPLOYER_ADDRESS_1")), nz((String) txn.get("EMPLOYER_ADDRESS_2")),
 					nz((String) txn.get("EMPLOYER_ADDRESS_3")), nz((String) txn.get("EMPLOYER_ADDRESS_4")), "",
-					"", "", "", "", nz((String) txn.get("EMPLOYER_STATE")), nz((String) txn.get("EMPLOYER_POSTCODE")),
+					"", "", "", "", fit(nz((String) txn.get("EMPLOYER_STATE")),20), nz((String) txn.get("EMPLOYER_POSTCODE")),
 					nz((String) txn.get("NATURE_BUSINESS")), nz((String) txn.get("NATURE_BUSINESS_DESCP")),
-					"", "", nz((String) txn.get("EMPLOYER_PHONE")), "", nz((String) txn.get("EMPLOYER_EMAIL")),
-					"", "", nz((String) txn.get("EMPLOYER_ROC")),
+					"", "", fit(nz((String) txn.get("EMPLOYER_PHONE")),20), "", nz((String) txn.get("EMPLOYER_EMAIL")),
+					"", "", fit(nz((String) txn.get("EMPLOYER_ROC")),25),
 					nz((String) txn.get("NATURE_BUSINESS")), "C", "", "PRINTED", "", "", "", 0d, "",
-					"", "", CONTACTID, "N", "N", "", "N", "",
+					"", "", fit(CONTACTID,20), "N", "N", "", "N", "",
 					"", "", "N", "", "7-08", "N", ""));
 
 			/* MAST ^-delimited worker / nationality-summary lists */
@@ -2175,18 +2179,25 @@ public class FWCMSOnline extends DB_Contact{
 			logIns(CNCODE, "TB_TRANSACTION", dbFWHS.insert_transaction("FWHS", "CN", USERID, ISSDATE, CONTACTID,
 					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dNet, CNCODE, "", "", USERID, "PRINTED"));
 
+			/* TB_FWHSCN is narrower than TB_FWCMS_ONLINE on a few columns —
+			   STATE(20), MOBILE_NO(20) and CONTACTID(20) vs the portal's
+			   30-char EMPLOYER_STATE/PHONE/ROC, and BUSINESS_NO(25) vs ROC(30)
+			   — so a full state name / long phone / long ROC would raise
+			   SQLCODE -302 / SQLSTATE 22001. Fit those to their target width;
+			   the free-text NAME/ADDRESS/OCCUPATION_DESC columns are 255 and
+			   comfortably hold the portal's values. */
 			logIns(CNCODE, "TB_FWHSCN", dbFWHS.Insert_FWHSCN2(
 					UKEY, CNCODE, POLNO, USERID, ISSUE_PRINCIPLE, ACCODE, USERID, "",
 					"", "", "", "N", ISSDATE, EFFDATE, EXPDATE, CNTIME,
 					"", "", "", nz((String) txn.get("EMPLOYER_NAME")), "",
 					nz((String) txn.get("EMPLOYER_ADDRESS_1")), nz((String) txn.get("EMPLOYER_ADDRESS_2")),
 					nz((String) txn.get("EMPLOYER_ADDRESS_3")), nz((String) txn.get("EMPLOYER_ADDRESS_4")), "",
-					"", "", "", "", nz((String) txn.get("EMPLOYER_STATE")), nz((String) txn.get("EMPLOYER_POSTCODE")),
+					"", "", "", "", fit(nz((String) txn.get("EMPLOYER_STATE")),20), nz((String) txn.get("EMPLOYER_POSTCODE")),
 					nz((String) txn.get("NATURE_BUSINESS")), nz((String) txn.get("NATURE_BUSINESS_DESCP")), "",
-					"", "", nz((String) txn.get("EMPLOYER_PHONE")), nz((String) txn.get("EMPLOYER_EMAIL")), "", "",
-					nz((String) txn.get("EMPLOYER_ROC")), nz((String) txn.get("NATURE_BUSINESS")),
+					"", "", fit(nz((String) txn.get("EMPLOYER_PHONE")),20), nz((String) txn.get("EMPLOYER_EMAIL")), "", "",
+					fit(nz((String) txn.get("EMPLOYER_ROC")),25), nz((String) txn.get("NATURE_BUSINESS")),
 					"C", "PRINTED", "", "", "", 0d, "", "",
-					"", CONTACTID, "N", "N", "", "N", "",
+					"", fit(CONTACTID,20), "N", "N", "", "N", "",
 					"", "", "N", "7-08", "", nz((String) txn.get("NATURE_BUSINESS")), "", "", ""));
 
 			String UKEY2 = UKEY;
