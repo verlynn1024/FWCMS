@@ -196,3 +196,162 @@ APPRREQ                         SYSIBM    CHARACTER                    1     0 Y
 STAMP_FEES                      SYSIBM    VARCHAR                     15     0 Yes
 
   46 record(s) selected.
+
+db2 => describe table TB_FWHSCN
+
+                                Data type                     Column
+Column name                     schema    Data type name      Length     Scale Nulls
+------------------------------- --------- ------------------- ---------- ----- ------
+UKEY                            SYSIBM    VARCHAR                    100     0 No
+CNCODE                          SYSIBM    VARCHAR                     50     0 Yes
+POLNO                           SYSIBM    VARCHAR                     50     0 Yes
+USERID                          SYSIBM    VARCHAR                     20     0 Yes
+PRINCIPLE                       SYSIBM    VARCHAR                     20     0 Yes
+ACCODE                          SYSIBM    VARCHAR                     20     0 Yes
+BRUSER_ID                       SYSIBM    VARCHAR                     20     0 Yes
+BR_ID                           SYSIBM    VARCHAR                     20     0 Yes
+PREVPOL                         SYSIBM    VARCHAR                     50     0 Yes
+MASTERIND                       SYSIBM    VARCHAR                      2     0 Yes
+MASTERPOL                       SYSIBM    VARCHAR                     50     0 Yes
+CNTYPE                          SYSIBM    VARCHAR                     20     0 Yes
+ISSDATE                         SYSIBM    VARCHAR                     20     0 Yes
+EFFDATE                         SYSIBM    VARCHAR                     20     0 Yes
+EXPDATE                         SYSIBM    VARCHAR                     20     0 Yes
+CNTIME                          SYSIBM    VARCHAR                     20     0 Yes
+REGION                          SYSIBM    VARCHAR                      5     0 Yes
+NEW_IC_NO                       SYSIBM    VARCHAR                     20     0 Yes
+OLD_IC_NO                       SYSIBM    VARCHAR                     24     0 Yes
+NAME                            SYSIBM    VARCHAR                    255     0 Yes
+DOB                             SYSIBM    VARCHAR                      8     0 Yes
+ADDRESS_1                       SYSIBM    VARCHAR                    255     0 Yes
+ADDRESS_2                       SYSIBM    VARCHAR                    255     0 Yes
+ADDRESS_3                       SYSIBM    VARCHAR                    255     0 Yes
+ADDRESS_4                       SYSIBM    VARCHAR                    255     0 Yes
+AGE                             SYSIBM    VARCHAR                      5     0 Yes
+MARITAL_STATUS                  SYSIBM    VARCHAR                     20     0 Yes
+SALUTATION                      SYSIBM    VARCHAR                     20     0 Yes
+NATIONALITY                     SYSIBM    VARCHAR                     20     0 Yes
+RACE                            SYSIBM    VARCHAR                     20     0 Yes
+STATE                           SYSIBM    VARCHAR                     20     0 Yes
+POSTCODE                        SYSIBM    VARCHAR                    255     0 Yes
+OCCUPATION_CODE                 SYSIBM    VARCHAR                     20     0 Yes
+OCCUPATION_DESC                 SYSIBM    VARCHAR                    255     0 Yes
+GENDER                          SYSIBM    VARCHAR                     20     0 Yes
+TEL_NO_HOME                     SYSIBM    VARCHAR                     20     0 Yes
+TEL_NO_OFFICE                   SYSIBM    VARCHAR                     20     0 Yes
+MOBILE_NO                       SYSIBM    VARCHAR                     20     0 Yes
+EMAIL                           SYSIBM    VARCHAR                    255     0 Yes
+FAX_NO_HOME                     SYSIBM    VARCHAR                     20     0 Yes
+FAX_NO_OFFICE                   SYSIBM    VARCHAR                     20     0 Yes
+BUSINESS_NO                     SYSIBM    VARCHAR                     25     0 Yes
+TRADE                           SYSIBM    VARCHAR                    255     0 Yes
+CONTACT_TYPE                    SYSIBM    VARCHAR                     10     0 Yes
+STATUS                          SYSIBM    VARCHAR                     20     0 Yes
+REC_DATE                        SYSIBM    LONG VARCHAR             32700     0 Yes
+REC_NO                          SYSIBM    LONG VARCHAR             32700     0 Yes
+REC_STATUS                      SYSIBM    LONG VARCHAR             32700     0 Yes
+REC_BALANCE                     SYSIBM    DECIMAL                     15     4 Yes
+REPLACECN                       SYSIBM    VARCHAR                     20     0 Yes
+CANCELDATE                      SYSIBM    VARCHAR                     20     0 Yes
+SUBMISSIONNO                    SYSIBM    VARCHAR                     20     0 Yes
+CONTACTID                       SYSIBM    VARCHAR                     20     0 Yes
+DELETED                         SYSIBM    VARCHAR                      5     0 Yes
+REFERIND                        SYSIBM    VARCHAR                     10     0 Yes
+MEMO                            SYSIBM    LONG VARCHAR             32700     0 Yes
+PROPOSAL_IND                    SYSIBM    VARCHAR                      2     0 Yes
+PROPOSAL_DATE                   SYSIBM    VARCHAR                     20     0 Yes
+UWYR_YR                         SYSIBM    VARCHAR                      4     0 Yes
+UWYR_MTH                        SYSIBM    VARCHAR                      2     0 Yes
+PRN_IND                         SYSIBM    VARCHAR                      2     0 Yes
+CLASS                           SYSIBM    VARCHAR                     20     0 Yes
+FWCS_NO                         SYSIBM    VARCHAR                     20     0 Yes
+NATURE_BUSINESS                 SYSIBM    VARCHAR                     20     0 Yes
+EMPLOYER_TYPE                   SYSIBM    VARCHAR                     10     0 Yes
+ENDORSE_NO                      SYSIBM    VARCHAR                      3     0 Yes
+ENDORSE_TYPE                    SYSIBM    VARCHAR                     10     0 Yes
+SPPA_IND                        SYSIBM    VARCHAR                     10     0 Yes
+ORCCODE                         SYSIBM    VARCHAR                     50     0 Yes
+IG_NO                           SYSIBM    VARCHAR                     25     0 Yes
+PA_NO                           SYSIBM    VARCHAR                     20     0 Yes
+PROJECTIND                      SYSIBM    VARCHAR                      2     0 Yes
+FWGC_NO                         SYSIBM    VARCHAR                     20     0 Yes
+SGPA_NO                         SYSIBM    VARCHAR                     20     0 Yes
+COVDATE                         SYSIBM    VARCHAR                      8     0 Yes
+REPLACE_POL                     SYSIBM    VARCHAR                     15     0 Yes
+REPLACE_POL_TYPE                SYSIBM    VARCHAR                      3     0 Yes
+
+  77 record(s) selected.
+
+db2 => describe table TB_FWIGCN
+
+                                Data type                     Column
+Column name                     schema    Data type name      Length     Scale Nulls
+------------------------------- --------- ------------------- ---------- ----- ------
+UKEY                            SYSIBM    VARCHAR                    100     0 No
+CNCODE                          SYSIBM    VARCHAR                     50     0 Yes
+POLNO                           SYSIBM    VARCHAR                     50     0 Yes
+USERID                          SYSIBM    VARCHAR                     20     0 Yes
+PRINCIPLE                       SYSIBM    VARCHAR                     20     0 Yes
+ACCODE                          SYSIBM    VARCHAR                     20     0 Yes
+BRUSER_ID                       SYSIBM    VARCHAR                     20     0 Yes
+BR_ID                           SYSIBM    VARCHAR                     20     0 Yes
+PREVPOL                         SYSIBM    VARCHAR                     50     0 Yes
+RI_METHOD                       SYSIBM    VARCHAR                     20     0 Yes
+CNTYPE                          SYSIBM    VARCHAR                     20     0 Yes
+ISSDATE                         SYSIBM    VARCHAR                     20     0 Yes
+EFFDATE                         SYSIBM    VARCHAR                     20     0 Yes
+EXPDATE                         SYSIBM    VARCHAR                     20     0 Yes
+NOOFMONTH                       SYSIBM    VARCHAR                      2     0 Yes
+CNTIME                          SYSIBM    VARCHAR                     20     0 Yes
+REGION                          SYSIBM    VARCHAR                      5     0 Yes
+NEW_IC_NO                       SYSIBM    VARCHAR                     20     0 Yes
+OLD_IC_NO                       SYSIBM    VARCHAR                     20     0 Yes
+NAME                            SYSIBM    VARCHAR                    255     0 Yes
+DOB                             SYSIBM    VARCHAR                      8     0 Yes
+ADDRESS_1                       SYSIBM    VARCHAR                    255     0 Yes
+ADDRESS_2                       SYSIBM    VARCHAR                    255     0 Yes
+ADDRESS_3                       SYSIBM    VARCHAR                    255     0 Yes
+ADDRESS_4                       SYSIBM    VARCHAR                    255     0 Yes
+AGE                             SYSIBM    VARCHAR                      5     0 Yes
+MARITAL_STATUS                  SYSIBM    VARCHAR                     20     0 Yes
+SALUTATION                      SYSIBM    VARCHAR                     20     0 Yes
+NATIONALITY                     SYSIBM    VARCHAR                     20     0 Yes
+RACE                            SYSIBM    VARCHAR                     20     0 Yes
+STATE                           SYSIBM    VARCHAR                     20     0 Yes
+POSTCODE                        SYSIBM    VARCHAR                    255     0 Yes
+OCCUPATION_CODE                 SYSIBM    VARCHAR                     20     0 Yes
+OCCUPATION_DESC                 SYSIBM    VARCHAR                    255     0 Yes
+GENDER                          SYSIBM    VARCHAR                     20     0 Yes
+TEL_NO_HOME                     SYSIBM    VARCHAR                     20     0 Yes
+TEL_NO_OFFICE                   SYSIBM    VARCHAR                     20     0 Yes
+MOBILE_NO                       SYSIBM    VARCHAR                     20     0 Yes
+EMAIL                           SYSIBM    VARCHAR                    255     0 Yes
+FAX_NO_HOME                     SYSIBM    VARCHAR                     20     0 Yes
+FAX_NO_OFFICE                   SYSIBM    VARCHAR                     20     0 Yes
+BUSINESS_NO                     SYSIBM    VARCHAR                     25     0 Yes
+TRADE                           SYSIBM    VARCHAR                    255     0 Yes
+CONTACT_TYPE                    SYSIBM    VARCHAR                     10     0 Yes
+ME_INCHARGE                     SYSIBM    VARCHAR                     20     0 Yes
+STATUS                          SYSIBM    VARCHAR                     20     0 Yes
+REC_DATE                        SYSIBM    LONG VARCHAR             32700     0 Yes
+REC_NO                          SYSIBM    LONG VARCHAR             32700     0 Yes
+REC_STATUS                      SYSIBM    LONG VARCHAR             32700     0 Yes
+REC_BALANCE                     SYSIBM    DECIMAL                     15     4 Yes
+REPLACECN                       SYSIBM    VARCHAR                     20     0 Yes
+CANCELDATE                      SYSIBM    VARCHAR                     20     0 Yes
+SUBMISSIONNO                    SYSIBM    VARCHAR                     20     0 Yes
+CONTACTID                       SYSIBM    VARCHAR                     20     0 Yes
+DELETED                         SYSIBM    VARCHAR                      5     0 Yes
+REFERIND                        SYSIBM    VARCHAR                     10     0 Yes
+ACCOM_REMARK                    SYSIBM    LONG VARCHAR             32700     0 Yes
+PROPOSAL_IND                    SYSIBM    VARCHAR                      2     0 Yes
+PROPOSAL_DATE                   SYSIBM    VARCHAR                     20     0 Yes
+UWYR_YR                         SYSIBM    VARCHAR                      4     0 Yes
+UWYR_MTH                        SYSIBM    VARCHAR                      2     0 Yes
+PRN_IND                         SYSIBM    VARCHAR                      2     0 Yes
+ORCCODE                         SYSIBM    VARCHAR                     30     0 Yes
+CLASS                           SYSIBM    VARCHAR                     20     0 Yes
+MASTERIND                       SYSIBM    VARCHAR                      2     0 Yes
+MASTERPOL                       SYSIBM    VARCHAR                     50     0 Yes
+
+  66 record(s) selected.

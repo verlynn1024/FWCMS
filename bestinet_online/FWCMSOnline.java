@@ -51,6 +51,21 @@ public class FWCMSOnline extends DB_Contact{
 		return new java.math.BigDecimal(sValue);
 	}
 
+	/* Clamp a value to its VARCHAR/CHAR column width before binding. The
+	   Bestinet enquiry response and the FWCMS code lookups can hand back a
+	   value wider than the target column (a full-word gender, a spelled-out
+	   nationality, an unusually long name/passport), which DB2 rejects with
+	   SQLCODE -302 / SQLSTATE 22001 (character right-truncation). Because the
+	   worker snapshot is written one row at a time inside a single
+	   transaction, one over-width worker aborts the whole snapshot and leaves
+	   TB_FWCMS_ONLINE_WORKER empty — which then starves TB_FWHSITEM at
+	   issuance. Fitting each value to its width keeps the snapshot intact
+	   (the column widths mirror what the print/issuance reads expect). */
+	private String fit(String sValue,int maxLen){
+		if(sValue == null) return "";
+		return sValue.length() > maxLen ? sValue.substring(0,maxLen) : sValue;
+	}
+
 	/* =====================================================================
 	   Parent — TB_FWCMS_ONLINE: one row per portal purchase journey,
 	   keyed by UUID. Portal-level data only; the per-product enquiry data
@@ -705,32 +720,35 @@ public class FWCMSOnline extends DB_Contact{
 			                 "CREATED_BY,CREATED_DATE)"+
 			                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?)";
 
+			/* Widths mirror TB_FWCMS_ONLINE_WORKER: NAME(120) PASSPORT(30)
+			   NATIONALITY(10) NATIONALITY_DESCP(100) GENDER(2) CREATED_BY(20).
+			   fit() guards against SQLCODE -302 / SQLSTATE 22001. */
 			pstmt = myConn.prepareStatement(myQuery);
-			pstmt.setString(1,UUID);
-			pstmt.setString(2,INSTYPE);
+			pstmt.setString(1,fit(UUID,36));
+			pstmt.setString(2,fit(INSTYPE,10));
 			pstmt.setInt(3,WORKERSEQ);
-			pstmt.setString(4,NAME);
-			pstmt.setString(5,PASSPORT);
-			pstmt.setString(6,NATIONALITY);
-			pstmt.setString(7,NATIONALITYDESCP);
-			pstmt.setString(8,GENDER);
+			pstmt.setString(4,fit(NAME,120));
+			pstmt.setString(5,fit(PASSPORT,30));
+			pstmt.setString(6,fit(NATIONALITY,10));
+			pstmt.setString(7,fit(NATIONALITYDESCP,100));
+			pstmt.setString(8,fit(GENDER,2));
 			pstmt.setBigDecimal(9,toDecimal(IGAMOUNT));
 			pstmt.setBigDecimal(10,toDecimal(PREMIUM));
-			pstmt.setString(11,CREATEDBY);
+			pstmt.setString(11,fit(CREATEDBY,20));
 			pstmt.setString(12,NOW);
 			RowsAffected = pstmt.executeUpdate();
 			pstmt.close();
 
 			if (RowsAffected > 0){
 				pstmt2 = new PreparedStatementLogable(myConn,myQuery);
-				pstmt2.setString(1,UUID);
-				pstmt2.setString(2,INSTYPE);
+				pstmt2.setString(1,fit(UUID,36));
+				pstmt2.setString(2,fit(INSTYPE,10));
 				pstmt2.setString(3,String.valueOf(WORKERSEQ));
-				pstmt2.setString(4,NAME);
-				pstmt2.setString(5,PASSPORT);
-				pstmt2.setString(6,NATIONALITY);
-				pstmt2.setString(7,NATIONALITYDESCP);
-				pstmt2.setString(8,GENDER);
+				pstmt2.setString(4,fit(NAME,120));
+				pstmt2.setString(5,fit(PASSPORT,30));
+				pstmt2.setString(6,fit(NATIONALITY,10));
+				pstmt2.setString(7,fit(NATIONALITYDESCP,100));
+				pstmt2.setString(8,fit(GENDER,2));
 				pstmt2.setString(9,toDecimal(IGAMOUNT).toPlainString());
 				pstmt2.setString(10,toDecimal(PREMIUM).toPlainString());
 				pstmt2.setString(11,CREATEDBY);
@@ -2051,18 +2069,22 @@ public class FWCMSOnline extends DB_Contact{
 			logIns(CNCODE, "TB_TRANSACTION", dbFWIG.insert_transaction("IG", "CN", USERID, ISSDATE, CONTACTID,
 					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dTot, CNCODE, "", "", USERID));
 
+			/* Same width guard as FWHS: TB_FWIGCN STATE(20)/TEL_NO_OFFICE(20)/
+			   CONTACTID(20) and BUSINESS_NO(25) are narrower than the portal's
+			   30-char EMPLOYER_STATE/PHONE/ROC, so fit them to avoid SQLCODE
+			   -302 / SQLSTATE 22001. NAME/ADDRESS/OCCUPATION_DESC are 255. */
 			logIns(CNCODE, "TB_FWIGCN", dbFWIG.Insert_FWIGCN(
 					UKEY, CNCODE, POLNO, USERID, ISSUE_PRINCIPLE, ACCODE, USERID, "",
 					"", "F", "N", ISSDATE, EFFDATE, EXPDATE, NOMONTH, CNTIME, "",
 					"", "", nz((String) txn.get("EMPLOYER_NAME")), "",
 					nz((String) txn.get("EMPLOYER_ADDRESS_1")), nz((String) txn.get("EMPLOYER_ADDRESS_2")),
 					nz((String) txn.get("EMPLOYER_ADDRESS_3")), nz((String) txn.get("EMPLOYER_ADDRESS_4")), "",
-					"", "", "", "", nz((String) txn.get("EMPLOYER_STATE")), nz((String) txn.get("EMPLOYER_POSTCODE")),
+					"", "", "", "", fit(nz((String) txn.get("EMPLOYER_STATE")),20), nz((String) txn.get("EMPLOYER_POSTCODE")),
 					nz((String) txn.get("NATURE_BUSINESS")), nz((String) txn.get("NATURE_BUSINESS_DESCP")),
-					"", "", nz((String) txn.get("EMPLOYER_PHONE")), "", nz((String) txn.get("EMPLOYER_EMAIL")),
-					"", "", nz((String) txn.get("EMPLOYER_ROC")),
+					"", "", fit(nz((String) txn.get("EMPLOYER_PHONE")),20), "", nz((String) txn.get("EMPLOYER_EMAIL")),
+					"", "", fit(nz((String) txn.get("EMPLOYER_ROC")),25),
 					nz((String) txn.get("NATURE_BUSINESS")), "C", "", "PRINTED", "", "", "", 0d, "",
-					"", "", CONTACTID, "N", "N", "", "N", "",
+					"", "", fit(CONTACTID,20), "N", "N", "", "N", "",
 					"", "", "N", "", "7-08", "N", ""));
 
 			/* MAST ^-delimited worker / nationality-summary lists */
@@ -2157,18 +2179,25 @@ public class FWCMSOnline extends DB_Contact{
 			logIns(CNCODE, "TB_TRANSACTION", dbFWHS.insert_transaction("FWHS", "CN", USERID, ISSDATE, CONTACTID,
 					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dNet, CNCODE, "", "", USERID, "PRINTED"));
 
+			/* TB_FWHSCN is narrower than TB_FWCMS_ONLINE on a few columns —
+			   STATE(20), MOBILE_NO(20) and CONTACTID(20) vs the portal's
+			   30-char EMPLOYER_STATE/PHONE/ROC, and BUSINESS_NO(25) vs ROC(30)
+			   — so a full state name / long phone / long ROC would raise
+			   SQLCODE -302 / SQLSTATE 22001. Fit those to their target width;
+			   the free-text NAME/ADDRESS/OCCUPATION_DESC columns are 255 and
+			   comfortably hold the portal's values. */
 			logIns(CNCODE, "TB_FWHSCN", dbFWHS.Insert_FWHSCN2(
 					UKEY, CNCODE, POLNO, USERID, ISSUE_PRINCIPLE, ACCODE, USERID, "",
 					"", "", "", "N", ISSDATE, EFFDATE, EXPDATE, CNTIME,
 					"", "", "", nz((String) txn.get("EMPLOYER_NAME")), "",
 					nz((String) txn.get("EMPLOYER_ADDRESS_1")), nz((String) txn.get("EMPLOYER_ADDRESS_2")),
 					nz((String) txn.get("EMPLOYER_ADDRESS_3")), nz((String) txn.get("EMPLOYER_ADDRESS_4")), "",
-					"", "", "", "", nz((String) txn.get("EMPLOYER_STATE")), nz((String) txn.get("EMPLOYER_POSTCODE")),
+					"", "", "", "", fit(nz((String) txn.get("EMPLOYER_STATE")),20), nz((String) txn.get("EMPLOYER_POSTCODE")),
 					nz((String) txn.get("NATURE_BUSINESS")), nz((String) txn.get("NATURE_BUSINESS_DESCP")), "",
-					"", "", nz((String) txn.get("EMPLOYER_PHONE")), nz((String) txn.get("EMPLOYER_EMAIL")), "", "",
-					nz((String) txn.get("EMPLOYER_ROC")), nz((String) txn.get("NATURE_BUSINESS")),
+					"", "", fit(nz((String) txn.get("EMPLOYER_PHONE")),20), nz((String) txn.get("EMPLOYER_EMAIL")), "", "",
+					fit(nz((String) txn.get("EMPLOYER_ROC")),25), nz((String) txn.get("NATURE_BUSINESS")),
 					"C", "PRINTED", "", "", "", 0d, "", "",
-					"", CONTACTID, "N", "N", "", "N", "",
+					"", fit(CONTACTID,20), "N", "N", "", "N", "",
 					"", "", "N", "7-08", "", nz((String) txn.get("NATURE_BUSINESS")), "", "", ""));
 
 			String UKEY2 = UKEY;
