@@ -1133,7 +1133,11 @@ document.getElementById('btnCancel').addEventListener('click', function () {
         }
     });
 });
-/* ── Make Payment ────────────────────────────────────────────────── */
+/* ── Make Payment ──────────────────────────────────────────────────
+   Before the payment gateway, POST the submission to the data-handling
+   endpoint (pop_fwcms_worker_detail_rep.jsp): it stamps the chosen
+   immigration branch onto the journey and inserts every product into the
+   FWCMS main tables. Only on its "OK" do we redirect to the payment page. */
 document.getElementById('btnPay').addEventListener('click', function () {
     if (!document.getElementById('chkDecl').checked) {
         Swal.fire({
@@ -1142,6 +1146,25 @@ document.getElementById('btnPay').addEventListener('click', function () {
             icon: 'warning',
             iconColor: '#FFD000',
             confirmButtonColor: '#0D014B'
+        });
+        return;
+    }
+
+    /* Immigration branch — required only when Bestinet supplied none (the
+       select carries data-required="1"); the master-list dropdown is rendered
+       by the FWIG fragment, so it may be absent for an FWHS-only submission. */
+    var immiSel = document.getElementById('selImmigration');
+    var immiVal = immiSel ? immiSel.value : '';
+    if (immiSel && immiSel.getAttribute('data-required') === '1' && immiVal === '') {
+        Swal.fire({
+            title: 'Immigration Branch Required',
+            text: 'Please select the Immigration Details before proceeding.',
+            icon: 'warning',
+            iconColor: '#FFD000',
+            confirmButtonColor: '#0D014B'
+        }).then(function () {
+            immiSel.focus();
+            immiSel.scrollIntoView({ behavior: 'smooth', block: 'center' });
         });
         return;
     }
@@ -1159,21 +1182,35 @@ document.getElementById('btnPay').addEventListener('click', function () {
         cancelButtonText: 'Back',
         reverseButtons: true
     }).then(function (r) {
-        if (r.isConfirmed) {
-            Swal.fire({
-                title: 'Redirecting…',
-                text: 'Connecting to e-Payment gateway.',
-                icon: 'info',
-                iconColor: '#0D014B',
-                allowOutsideClick: false,
-                allowEscapeKey: false,
-                didOpen: function () { Swal.showLoading(); },
-                timer: 2200,
-                timerProgressBar: true
-            }).then(function () {
+        if (!r.isConfirmed) return;
+
+        Swal.fire({
+            title: 'Processing…',
+            text: 'Saving your submission and preparing the e-Payment gateway.',
+            icon: 'info',
+            iconColor: '#0D014B',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: function () { Swal.showLoading(); }
+        });
+
+        $.post('pop_fwcms_worker_detail_rep.jsp', { immi: immiVal })
+            .done(function (resp) {
+                var status = (resp || '').toString().trim();
+                if (status === 'LOGOUT') {
+                    window.location.href = '../login/logout.jsp';
+                    return;
+                }
                 window.location.href = 'pop_fwcms_payment.jsp';
+            })
+            .fail(function () {
+                Swal.fire({
+                    title: 'Submission Failed',
+                    text: 'We could not save your submission. Please try again.',
+                    icon: 'error',
+                    confirmButtonColor: '#0D014B'
+                });
             });
-        }
     });
 });
 </script>

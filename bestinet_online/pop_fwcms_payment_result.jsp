@@ -42,9 +42,11 @@ System.out.println(_sb.toString());
 
     /* ── [MOCK] Payment leg only — issuance already done pre-payment ──
        Issuance (the class-table insert) now happens BEFORE the payment
-       gateway, on pop_fwcms_payment.jsp: each product is inserted into the
-       existing FWCMS main tables via FWCMSOnline.issueMainTables there, so
-       by the time this page runs every product already carries its real
+       gateway, in pop_fwcms_worker_detail_rep.jsp (the data-handling endpoint
+       the worker-detail page POSTs to on "Make Payment"): each product is
+       inserted into the existing FWCMS main tables via
+       FWCMSOnline.issueMainTables there, so by the time this page runs every
+       product already carries its real
        cover note / policy number (or an MCK- mock stamp if the CN series was
        not seeded). This page no longer inserts anything into the class
        tables — it only handles the two post-gateway legs:

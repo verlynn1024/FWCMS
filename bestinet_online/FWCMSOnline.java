@@ -155,6 +155,45 @@ public class FWCMSOnline extends DB_Contact{
 			return RowsAffected;
 	}
 
+	/* Stamp only the immigration branch onto the journey. Used when the
+	   Bestinet enquiry carried no immigration branch (its immigrationBranchCode
+	   was blank / "N/A") and the agent picks one from the master-list dropdown
+	   on the worker-detail page: pop_fwcms_worker_detail_rep.jsp resolves the
+	   selected branch's description and writes both here, BEFORE issuance, so
+	   the chosen branch flows into the FWIG main tables (the Guarantee Letter's
+	   addressee reads IMMI_DESCP / IMMI_ADDRESS from this row). Unlike
+	   updateFWCMSONLINETRANSEnquiry this touches only the two immigration
+	   columns, leaving the employer / reference fields the enquiry stamped
+	   untouched. */
+	public int updateFWCMSONLINETRANSImmi(String IMMICODE,String IMMIDESCP,
+								String UPDATEDBY,String UUID)
+								throws Exception{
+
+			String NOW = now();
+			String myQuery	= "UPDATE TB_FWCMS_ONLINE SET IMMI_CODE=?,IMMI_DESCP=?,"+
+							  "UPDATED_BY=?,UPDATED_DATE=? WHERE UUID=?";
+			pstmt = myConn.prepareStatement(myQuery);
+			pstmt.setString(1,IMMICODE);
+			pstmt.setString(2,IMMIDESCP);
+			pstmt.setString(3,UPDATEDBY);
+			pstmt.setString(4,NOW);
+			pstmt.setString(5,UUID);
+			RowsAffected = pstmt.executeUpdate();
+			pstmt.close();
+
+			if (RowsAffected > 0){
+				pstmt2 = new PreparedStatementLogable(myConn,myQuery);
+				pstmt2.setString(1,IMMICODE);
+				pstmt2.setString(2,IMMIDESCP);
+				pstmt2.setString(3,UPDATEDBY);
+				pstmt2.setString(4,NOW);
+				pstmt2.setString(5,UUID);
+				insertSQLLog2("SQL",pstmt2.toString(),"","","","");
+			}
+
+			return RowsAffected;
+	}
+
 	/* Basket total = sum of the children's NET_PREMIUM, computed by the
 	   database so parent and DTL rows can never drift apart. */
 	public int updateFWCMSONLINETRANSTotal(String PURCHASESTATUS,String UPDATEDBY,String UUID)

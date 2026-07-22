@@ -1,8 +1,8 @@
 # FWCMS Main-Table Integration — Bestinet Online Portal
 
-**Status:** implemented (issuance runs **before** the payment gateway, on the
-payment page, with a mock fallback for environments where the cover-note series
-is not yet seeded).
+**Status:** implemented (issuance runs **before** the payment gateway, in the
+worker-detail data-handling endpoint `pop_fwcms_worker_detail_rep.jsp`, with a
+mock fallback for environments where the cover-note series is not yet seeded).
 
 ## 1. The problem this solves
 
@@ -104,10 +104,12 @@ FWCMS → eCover
   Check split policy
   Calculate premium
   Display premium
-  ── (payment page, BEFORE the gateway) ───────────────
-  Insert into existing MAIN tables   ◄── NEW (pre-payment)
-  Insert XML transaction records     ◄── (online DTL stamped with real CN)
-  Generate cover note                ◄── real CNCODE / POLNO
+  ── worker-detail page → "Make Payment" ──────────────
+  POST pop_fwcms_worker_detail_rep.jsp (BEFORE the gateway):
+    Stamp chosen immigration branch onto TB_FWCMS_ONLINE
+    Insert into existing MAIN tables   ◄── NEW (pre-payment)
+    Insert XML transaction records     ◄── (online DTL stamped with real CN)
+    Generate cover note                ◄── real CNCODE / POLNO
   ── (redirect to payment gateway) ────────────────────
   ── (payment confirmed, result page) ─────────────────
   Stamp payment PAID + close journey ISSUED
@@ -118,6 +120,18 @@ This ordering matches the legacy eCover flow, where "Save cover note" (the
 class-table insert) precedes payment. The database insertion is therefore done
 **before** the user enters the payment gateway; the result page only confirms
 the payment leg and closes the journey.
+
+### Immigration branch selection
+
+When the Bestinet enquiry carries no immigration branch (`immigrationBranchCode`
+blank / `"N/A"`), the worker-detail page shows a **required** dropdown of the
+master list (`TB_FWCMS_CODE` `TYPE='IMMI_CODE'`). The chosen branch is submitted
+to `pop_fwcms_worker_detail_rep.jsp`, which resolves its description (and the G7
+`IMMI_ADDRESS` when seeded) and stamps `IMMI_CODE` / `IMMI_DESCP` /
+`IMMI_ADDRESS` onto the journey's `TB_FWCMS_ONLINE` row via
+`updateFWCMSONLINETRANSImmi` / `updateFWCMSONLINETRANSImmiAddress` — **before**
+`issueMainTables` runs, so the branch is carried into the FWIG main tables (the
+Guarantee Letter's addressee reads it from there).
 
 ### Controller: `FWCMSOnline` (thin)
 
@@ -142,14 +156,16 @@ public String issueMainTables(String UUID, String INSTYPE, String USERID)
 4. stamps the generated `CNCODE` / `POLNO` back onto the online DTL row via
    `updateFWCMSONLINEDTLIssued`, preserving the `UUID` linkage.
 
-### Entry point: `pop_fwcms_payment.jsp` (before the gateway)
+### Entry point: `pop_fwcms_worker_detail_rep.jsp` (before the gateway)
 
-On the payment page — before the user is redirected to the payment gateway — the
-page loops the journey's products and calls
-`FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)` per product. The loop is
-idempotent (products already issued with a real, non-`MCK` cover note are
-skipped), so reloading or retrying the payment page never re-inserts. On success
-the printing module has a real policy to render. If issuance throws (e.g. the
+The worker-detail page (`pop_fwcms_worker_detail.jsp`) is a pure view; on "Make
+Payment" it POSTs to `pop_fwcms_worker_detail_rep.jsp`, which does all the data
+handling and only then does the page redirect to `pop_fwcms_payment.jsp`. The
+endpoint first stamps the chosen immigration branch (above), then loops the
+journey's products and calls `FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)`
+per product. The loop is idempotent (products already issued with a real,
+non-`MCK` cover note are skipped), so retrying never re-inserts. On success the
+printing module has a real policy to render. If issuance throws (e.g. the
 cover-note series is not seeded in this environment), the product falls back to
 the previous `MCK…` mock stamp so the portal still renders — the `MCK` prefix
 makes fallbacks easy to find and purge.
@@ -181,7 +197,7 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
    DB_FWIG / DB_FWHS                           TB_FWCMS_ONLINE_DTL  (tracking)
         │                                       TB_FWCMS_ONLINE_WORKER (tracking)
         │                                          │
-        │                                     payment.jsp (BEFORE gateway)
+        │                                     worker_detail_rep.jsp (BEFORE gateway)
         │                                       FWCMSOnline.issueMainTables()
         │                                          │  (controller)
         ▼                                          ▼  delegates to beans
