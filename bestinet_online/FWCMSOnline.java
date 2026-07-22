@@ -1956,6 +1956,22 @@ public class FWCMSOnline extends DB_Contact{
 		return toDecimal(nz((o == null) ? "" : o.toString())).doubleValue();
 	}
 
+	/* Per-table insertion tracker. Logs rows affected for every class-table
+	   INSERT so a failed/zero-row write is visible in the app log; a zero-row
+	   result throws so the caller rolls the whole product back (never a
+	   half-written policy). */
+	private void logIns(String CNCODE, String TABLE, int rows) throws Exception{
+		if (rows > 0){
+			System.out.println("[FWCMSISSUE] CNCODE=" + CNCODE + " table=" + TABLE
+				+ " INSERT ok rows=" + rows);
+		} else {
+			System.out.println("[FWCMSISSUE] CNCODE=" + CNCODE + " table=" + TABLE
+				+ " INSERT FAILED rows=" + rows);
+			throw new Exception("Class-table insert affected 0 rows: " + TABLE
+				+ " (CNCODE=" + CNCODE + ")");
+		}
+	}
+
 	/* Number of months of cover from the eff/exp span; FWCMS default "12". */
 	private String monthsOfCover(String eff, String exp){
 		try {
@@ -2032,10 +2048,10 @@ public class FWCMSOnline extends DB_Contact{
 			String FWCMSREF = nz((String) dtl.get("BTN_TRANS_REF"));
 			if (FWCMSREF.equals("")) FWCMSREF = nz((String) dtl.get("REFNO"));
 
-			dbFWIG.insert_transaction("IG", "CN", USERID, ISSDATE, CONTACTID,
-					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dTot, CNCODE, "", "", USERID);
+			logIns(CNCODE, "TB_TRANSACTION", dbFWIG.insert_transaction("IG", "CN", USERID, ISSDATE, CONTACTID,
+					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dTot, CNCODE, "", "", USERID));
 
-			dbFWIG.Insert_FWIGCN(
+			logIns(CNCODE, "TB_FWIGCN", dbFWIG.Insert_FWIGCN(
 					UKEY, CNCODE, POLNO, USERID, ISSUE_PRINCIPLE, ACCODE, USERID, "",
 					"", "F", "N", ISSDATE, EFFDATE, EXPDATE, NOMONTH, CNTIME, "",
 					"", "", nz((String) txn.get("EMPLOYER_NAME")), "",
@@ -2047,7 +2063,7 @@ public class FWCMSOnline extends DB_Contact{
 					"", "", nz((String) txn.get("EMPLOYER_ROC")),
 					nz((String) txn.get("NATURE_BUSINESS")), "C", "", "PRINTED", "", "", "", 0d, "",
 					"", "", CONTACTID, "N", "N", "", "N", "",
-					"", "", "N", "", "7-08", "N", "");
+					"", "", "N", "", "7-08", "N", ""));
 
 			/* MAST ^-delimited worker / nationality-summary lists */
 			String UKEY2 = UKEY;
@@ -2083,20 +2099,20 @@ public class FWCMSOnline extends DB_Contact{
 				sT.append(comm.fnFormatNumber(String.valueOf(agg[1]), 4));
 				first=false;
 			}
-			dbFWIG.Insert_FWIGMAST(
+			logIns(CNCODE, "TB_FWIGMAST", dbFWIG.Insert_FWIGMAST(
 					UKEY2, nz((String) txn.get("IMMI_CODE")), nz((String) txn.get("IMMI_DESCP")),
 					nz((String) txn.get("IMMI_ADDRESS")), "", "", "", "", "", "", "", "",
 					"", "", "", "", "0", "0",
 					eN.toString(), eP.toString(), eNat.toString(),
 					"0", ePr.toString(), "", eA.toString(), "",
 					sN.toString(), sNo.toString(), sA.toString(), sT.toString(),
-					"0", "0", dTotAmt, dTotPrem, 0d, eG.toString(), "");
+					"0", "0", dTotAmt, dTotPrem, 0d, eG.toString(), ""));
 
-			dbFWIG.Insert_FWIGSCH_CFMKT(
+			logIns(CNCODE, "TB_FWIGSCH", dbFWIG.Insert_FWIGSCH_CFMKT(
 					UKEY2, ISSUE_CURRENCY, ISSUE_CURRENCY, 1d, dSumIns, dSumIns, dGross, dGross,
 					dRebate, 0d, dStax, 8d, dStamp, dNet, 0d, 0d,
 					0d, 0d, dTot, dGross, 0d, 0d,
-					"N", "", FWCMSREF, "", "", "0.00");
+					"N", "", FWCMSREF, "", "", "0.00"));
 
 			dbFWIG.conCommit();
 			return CNCODE + "^" + POLNO;
@@ -2138,10 +2154,10 @@ public class FWCMSOnline extends DB_Contact{
 			String FWCMSREF = nz((String) dtl.get("BTN_TRANS_REF"));
 			if (FWCMSREF.equals("")) FWCMSREF = nz((String) dtl.get("REFNO"));
 
-			dbFWHS.insert_transaction("FWHS", "CN", USERID, ISSDATE, CONTACTID,
-					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dNet, CNCODE, "", "", USERID, "PRINTED");
+			logIns(CNCODE, "TB_TRANSACTION", dbFWHS.insert_transaction("FWHS", "CN", USERID, ISSDATE, CONTACTID,
+					"N", ISSUE_PRINCIPLE, ACCODE, ISSDATE, "", dNet, CNCODE, "", "", USERID, "PRINTED"));
 
-			dbFWHS.Insert_FWHSCN2(
+			logIns(CNCODE, "TB_FWHSCN", dbFWHS.Insert_FWHSCN2(
 					UKEY, CNCODE, POLNO, USERID, ISSUE_PRINCIPLE, ACCODE, USERID, "",
 					"", "", "", "N", ISSDATE, EFFDATE, EXPDATE, CNTIME,
 					"", "", "", nz((String) txn.get("EMPLOYER_NAME")), "",
@@ -2153,15 +2169,15 @@ public class FWCMSOnline extends DB_Contact{
 					nz((String) txn.get("EMPLOYER_ROC")), nz((String) txn.get("NATURE_BUSINESS")),
 					"C", "PRINTED", "", "", "", 0d, "", "",
 					"", CONTACTID, "N", "N", "", "N", "",
-					"", "", "N", "7-08", "", nz((String) txn.get("NATURE_BUSINESS")), "", "", "");
+					"", "", "N", "7-08", "", nz((String) txn.get("NATURE_BUSINESS")), "", "", ""));
 
 			String UKEY2 = UKEY;
-			dbFWHS.Insert_FWHSSCH(
+			logIns(CNCODE, "TB_FWHSSCH", dbFWHS.Insert_FWHSSCH(
 					UKEY2, dSumIns, dGross, dGross, 0d,
 					0d, dStax, 8d, dSvcFee, 0d, dStamp, dNet, 0d,
 					0d, 0d, 0d, dNet, dGross, 0d, 0d, "",
 					0d, dTotEmp, "", "N", "", FWCMSREF, "",
-					"", "", "", "", "0.00");
+					"", "", "", "", "0.00"));
 
 			Vector vItems = new Vector();
 			for (int i=0; i<workers.size(); i++){
@@ -2184,7 +2200,7 @@ public class FWCMSOnline extends DB_Contact{
 				r.addElement("N"); /*24 WORK_ID*/
 				vItems.addElement(r);
 			}
-			if (vItems.size() > 0) dbFWHS.Insert_FWHSITEM(vItems);
+			if (vItems.size() > 0) logIns(CNCODE, "TB_FWHSITEM", dbFWHS.Insert_FWHSITEM(vItems));
 
 			dbFWHS.conCommit();
 			return CNCODE + "^" + POLNO;
