@@ -1305,18 +1305,34 @@ public class FWCMSOnline extends DB_Contact{
 	}
 
 	/* Class-table enrichment, FWHS: CN header, SCH, plus one Hashtable per
-	   TB_FWHSITEM worker row under key "WORKERS" (ArrayList). */
+	   TB_FWHSITEM worker row under key "WORKERS" (ArrayList). Mirrors
+	   getFWIGPrintData: the policy SCHEDULE (pop_fwcms_FWHS_SCH_print.jsp)
+	   prints the full premium box plus a per-worker listing, so this reads
+	   the occupation/business columns and the TB_FWHSSCH premium breakdown,
+	   and resolves the worker occupation-sector / country descriptions the
+	   legacy pop_cn_fwhs_preview.jsp looked up inline. */
 	public Hashtable getFWHSPrintData(String CNCODE) throws Exception{
 
 		Hashtable htFWHS = new Hashtable();
+		String PRINCIPLE = "";
 
 		/* CN header keys on UKEY and carries the dates (ISSDATE/EFFDATE/
 		   EXPDATE) — TB_FWHSSCH has none of those columns (verified
 		   against the TB_FWHSSCH describe and BestinetXML, which reads
-		   B.EFFDATE/B.EXPDATE from TB_FWHSCN B). */
+		   B.EFFDATE/B.EXPDATE from TB_FWHSCN B). The occupation / business-
+		   registration columns feed the schedule's "Business or Occupation"
+		   and "Business Reg. No. / NRIC" boxes (absent from the online GL
+		   model, so read here). */
+		String occupDescRaw		= "";
+		String occupCode		= "";
+		String natureBusiness	= "";
+		String businessNo		= "";
+		String newIcNo			= "";
+		String oldIcNo			= "";
 		String myQuery = "SELECT NAME,ADDRESS_1,ADDRESS_2,ADDRESS_3,ADDRESS_4,"+
 						 "POSTCODE,STATE,POLNO,ACCODE,CLASS,PRINCIPLE,"+
-						 "ISSDATE,EFFDATE,EXPDATE "+
+						 "ISSDATE,EFFDATE,EXPDATE,"+
+						 "OCCUPATION_DESC,OCCUPATION_CODE,NATURE_BUSINESS,BUSINESS_NO,NEW_IC_NO,OLD_IC_NO "+
 						 "FROM TB_FWHSCN WHERE UKEY=? WITH UR";
 		pstmt = myConn.prepareStatement(myQuery);
 		pstmt.setString(1, CNCODE);
@@ -1332,22 +1348,62 @@ public class FWCMSOnline extends DB_Contact{
 			htFWHS.put("POLNO",		nz(rs.getString("POLNO")));
 			htFWHS.put("ACCODE",	nz(rs.getString("ACCODE")));
 			htFWHS.put("CLASS",		nz(rs.getString("CLASS")));
-			htFWHS.put("PRINCIPLE",	nz(rs.getString("PRINCIPLE")));
+			PRINCIPLE = nz(rs.getString("PRINCIPLE"));
+			htFWHS.put("PRINCIPLE",	PRINCIPLE);
 			htFWHS.put("ISSDATE",	nz(rs.getString("ISSDATE")));
 			htFWHS.put("EFFDATE",	nz(rs.getString("EFFDATE")));
 			htFWHS.put("EXPDATE",	nz(rs.getString("EXPDATE")));
+			occupDescRaw	= nz(rs.getString("OCCUPATION_DESC"));
+			occupCode		= nz(rs.getString("OCCUPATION_CODE"));
+			natureBusiness	= nz(rs.getString("NATURE_BUSINESS"));
+			businessNo		= nz(rs.getString("BUSINESS_NO"));
+			newIcNo			= nz(rs.getString("NEW_IC_NO"));
+			oldIcNo			= nz(rs.getString("OLD_IC_NO"));
 		}
 		rs.close();
 		pstmt.close();
 
-		/* SCH keys on UKEY2 — sum insured / FWCMS reference only. */
-		myQuery = "SELECT SUMINS,FWCMSREFNO FROM TB_FWHSSCH WHERE UKEY2=? WITH UR";
+		/* Business/occupation display line: NATURE_BUSINESS resolved via
+		   TB_NMOCCUPATION (MAINCLS='IG') overrides the raw OCCUPATION_CODE,
+		   which fills in for a blank / "-" free-text OCCUPATION_DESC — the
+		   exact precedence the legacy FWHS schedule preview applied. Business
+		   Reg. No. falls back to the (new, else old) NRIC, else the business
+		   number. */
+		String natureDescp = resolveFWIGOccupation(PRINCIPLE, natureBusiness);
+		if (!natureDescp.equals("")) occupCode = natureDescp;
+		if (occupDescRaw.equals("") || occupDescRaw.equals("-")) occupDescRaw = occupCode;
+		String occupationDisplay = occupDescRaw.equals("") ? occupCode : occupDescRaw;
+		if (newIcNo.equals("")) newIcNo = oldIcNo;
+		if (newIcNo.equals("")) newIcNo = businessNo;
+		htFWHS.put("OCCUPATION_DISPLAY",	occupationDisplay);
+		htFWHS.put("BUSINESS_DISPLAY",		newIcNo);
+
+		/* SCH keys on UKEY2 — sum insured / FWCMS reference plus the premium
+		   breakdown (gross, rebate, service tax, TPCA/service + FWCMS fee,
+		   service charge/levy, stamp duty, stamp fees, net) the schedule's
+		   premium box prints. SERVICE_FEE + FWCMS_FEE combine into the TPCA /
+		   Service Fee line, LEVYAMT is the service charge on it — as the
+		   legacy preview computes. */
+		myQuery = "SELECT SUMINS,FWCMSREFNO,GPREM,STAXPCT,STAXAMT,SERVICE_FEE,"+
+				  "FWCMS_FEE,LEVYAMT,STAMPDUTY,NETPREM,REBATEPCT,REBATEAMT,STAMP_FEES "+
+				  "FROM TB_FWHSSCH WHERE UKEY2=? WITH UR";
 		pstmt = myConn.prepareStatement(myQuery);
 		pstmt.setString(1, CNCODE);
 		rs = pstmt.executeQuery();
 		if (rs.next()){
 			htFWHS.put("SUMINS",		nz(rs.getBigDecimal("SUMINS")));
 			htFWHS.put("FWCMSREFNO",	nz(rs.getString("FWCMSREFNO")));
+			htFWHS.put("GPREM",			nz(rs.getString("GPREM")));
+			htFWHS.put("STAXPCT",		nz(rs.getString("STAXPCT")));
+			htFWHS.put("STAXAMT",		nz(rs.getString("STAXAMT")));
+			htFWHS.put("SERVICE_FEE",	nz(rs.getString("SERVICE_FEE")));
+			htFWHS.put("FWCMS_FEE",		nz(rs.getString("FWCMS_FEE")));
+			htFWHS.put("LEVYAMT",		nz(rs.getString("LEVYAMT")));
+			htFWHS.put("STAMPDUTY",		nz(rs.getString("STAMPDUTY")));
+			htFWHS.put("NETPREM",		nz(rs.getString("NETPREM")));
+			htFWHS.put("REBATEPCT",		nz(rs.getString("REBATEPCT")));
+			htFWHS.put("REBATEAMT",		nz(rs.getString("REBATEAMT")));
+			htFWHS.put("STAMP_FEES",	nz(rs.getString("STAMP_FEES")));
 		}
 		rs.close();
 		pstmt.close();
@@ -1357,9 +1413,12 @@ public class FWCMSOnline extends DB_Contact{
 		   not equality, and order by SEQNO — verified against BestinetXML
 		   (A.UKEY LIKE '<ukey>%') and inputXML (ORDER BY CAST(SEQNO ...)).
 		   The worker name column is EMP_NAME (TB_FWHSITEM has no NAME
-		   column); exposed under the "NAME" key the templates expect. */
+		   column); exposed under the "NAME" key the templates expect. Raw
+		   codes are collected first; the occupation-sector / country
+		   descriptions are resolved in a second pass so no lookup query runs
+		   while the worker ResultSet is still open. */
 		ArrayList alWorkers = new ArrayList();
-		myQuery = "SELECT EMP_NAME,PASSPORT,NATIONALITY,GENDER,SUMINS,PREMIUM "+
+		myQuery = "SELECT EMP_NAME,OCCPSEC,DOB,GENDER,PASSPORT,NATIONALITY,SUMINS,PREMIUM "+
 				  "FROM TB_FWHSITEM WHERE UKEY LIKE ? ORDER BY CAST(SEQNO AS INTEGER) WITH UR";
 		pstmt = myConn.prepareStatement(myQuery);
 		pstmt.setString(1, CNCODE + "%");
@@ -1367,18 +1426,49 @@ public class FWCMSOnline extends DB_Contact{
 		while (rs.next()){
 			Hashtable htWorker = new Hashtable();
 			htWorker.put("NAME",		nz(rs.getString("EMP_NAME")));
+			htWorker.put("OCCPSEC",		nz(rs.getString("OCCPSEC")));
+			htWorker.put("DOB",			nz(rs.getString("DOB")));
+			htWorker.put("GENDER",		nz(rs.getString("GENDER")));
 			htWorker.put("PASSPORT",	nz(rs.getString("PASSPORT")));
 			htWorker.put("NATIONALITY",	nz(rs.getString("NATIONALITY")));
-			htWorker.put("GENDER",		nz(rs.getString("GENDER")));
 			htWorker.put("SUMINS",		nz(rs.getBigDecimal("SUMINS")));
 			htWorker.put("PREMIUM",		nz(rs.getBigDecimal("PREMIUM")));
 			alWorkers.add(htWorker);
 		}
 		rs.close();
 		pstmt.close();
+
+		for (int i = 0; i < alWorkers.size(); i++){
+			Hashtable htWorker = (Hashtable) alWorkers.get(i);
+			htWorker.put("OCCPSEC_DESCP",		resolveOccupSector(PRINCIPLE, (String) htWorker.get("OCCPSEC")));
+			htWorker.put("NATIONALITY_DESCP",	resolveFWIGNationality(PRINCIPLE, (String) htWorker.get("NATIONALITY")));
+		}
 		htFWHS.put("WORKERS", alWorkers);
 
 		return htFWHS;
+	}
+
+	/* TB_OCCUPSECTOR occupation-sector-code → description lookup for the FWHS
+	   schedule's worker listing (INSCODE keyed, as the legacy preview). Blank
+	   code / no match returns "" so the caller can fall back to the raw code.
+	   Uses the connection already open on this instance. */
+	private String resolveOccupSector(String PRINCIPLE, String code) throws Exception{
+		if (code == null) code = "";
+		code = code.trim();
+		if (code.equals("")) return "";
+		String descp = "";
+		String q = "SELECT DESCP FROM TB_OCCUPSECTOR WHERE CODE=? AND INSCODE=? "+
+				   "FETCH FIRST ROWS ONLY WITH UR";
+		PreparedStatement ps = myConn.prepareStatement(q);
+		ps.setString(1, code);
+		ps.setString(2, PRINCIPLE);
+		ResultSet r = ps.executeQuery();
+		if (r.next()){
+			descp = nz(r.getString("DESCP"));
+		}
+		r.close();
+		ps.close();
+		return descp;
 	}
 
 	/* Privacy notice cut-off: TB_CONTROL PRIVACY_NOTICE vs the issue date
