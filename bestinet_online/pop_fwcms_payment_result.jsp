@@ -40,123 +40,15 @@ System.out.println(_sb.toString());
        state is read by the printing pipeline). */
     String FWCMS_UUID = common.setNullToString((String)session.getAttribute("SES_FWCMS_ONLINE_UUID"));
 
-    /* ── [MOCK] Payment leg only — issuance is now real ─────────────
-       Issuance (the Bestinet details-push) has landed: each product is
-       inserted into the existing FWCMS main tables via
-       FWCMSOnline.issueMainTables (see the block below), so the page no
-       longer mocks that leg. What remains mocked is the payment gateway
-       callback, which does not exist yet — so the page still stamps the
-       payment leg itself, through the same DAO method the real gateway
-       callback will use, keeping every printing guard in
-       template/gen_fwcms_pdf.jsp on real DB data (no bypass in the entry
-       point):
-
-         1. payment  — [MOCK] journey stamped PAID with a MOCKPAY- ref
-                       (updateFWCMSONLINETRANSPayment); the real gateway
-                       callback will supply the true payment reference
-         2. issuance — [REAL] every product inserted into the FWCMS class
-                       tables via issueMainTables, generating the real
-                       cover note / policy number and stamping it back on
-                       the online DTL row; only if issuance throws (e.g. the
-                       CN series is not seeded here yet) does that product
-                       fall back to a mock MCK- stamp
-         3. status   — journey closed TRANS_STATUS='S' / PURCHASE_STATUS=
-                       'ISSUED' once every product is issued
-                       (updateFWCMSONLINETRANSStatus)
-
-       EVERY FWCMS document — the FWIG Guarantee Letter included — now
-       renders from the MAIN class tables (TB_FWIGCN / TB_FWIGSCH /
-       TB_FWIGMAST, TB_FWHSCN / …) via FWCMSOnline.getFWIGPrintData /
-       getFWHSPrintData, exactly like the legacy eCover previews; the
-       online DTL row supplies only the UUID -> CNCODE linkage. So a
-       product left on the MCK- mock fallback has NO class-table rows and
-       will NOT print — real main-table issuance is a hard prerequisite
-       for the print buttons below. PAYMENT=F still previews the failed
-       state without stamping anything.
-       [REMOVE when the payment gateway callback lands: restore
-       isSuccess = "Y".equalsIgnoreCase(request.getParameter("PAYMENT"))
-       and let the gateway callback supply the payment stamp. The MOCKPAY-
-       payment ref and any MCK- issuance fallbacks make mock-stamped rows
-       easy to find and purge.] */
+    /* ── Payment result flag ────────────────────────────────────────
+       The page reads real data only — it stamps NOTHING. Payment and
+       main-table issuance are done by the real gateway callback / eCover
+       issuance flow, so the journey's TB_FWCMS_ONLINE payment status and
+       its TB_FWCMS_ONLINE_DTL cover-note linkage are already set in the
+       database by the time this page loads. PAYMENT=F previews the failed
+       state; anything else previews the success state. */
     String paymentFlag = request.getParameter("PAYMENT");
     boolean isSuccess  = !"F".equalsIgnoreCase(paymentFlag);
-
-    if (isSuccess && !FWCMS_UUID.equals(""))
-    {
-        try
-        {
-            FWCMSOnline.makeConnection();
-            java.util.Hashtable htTXN = FWCMSOnline.getFWCMSONLINETRANS(FWCMS_UUID);
-            /* stamp once — reloads must not rewrite the payment row */
-            if (htTXN != null && !"PAID".equals((String)htTXN.get("PAYMENT_STATUS")))
-            {
-                FWCMSOnline.updateFWCMSONLINETRANSPayment("PAID",
-                    "MOCKPAY-" + System.currentTimeMillis(), "MOCK_PAY",
-                    SESUSERID, FWCMS_UUID);
-            }
-
-            /* Issuance — insert each product into the existing FWCMS main
-               tables (TB_FWIGCN/…/TB_FWHSITEM) via FWCMSOnline.issueMainTables,
-               which reuses the legacy DB_FWIG / DB_FWHS DAOs and generates the
-               real cover note / policy number, then stamps it back onto the
-               online DTL row (idempotent: already-issued real rows are skipped).
-
-               Only after a product's main-table row exists does the printing
-               module have a policy to render. If issuance throws (e.g. the CN
-               series is not seeded in this environment yet) the product falls
-               back to a mock stamp so the portal demo still renders; the MCK-
-               prefixed rows make those fallbacks easy to find and purge. */
-            if (htTXN != null)
-            {
-                String sMockIssDate = new java.text.SimpleDateFormat("yyyyMMdd").format(new java.util.Date());
-                String sMockSuffix  = new java.text.SimpleDateFormat("yyMMddHHmmss").format(new java.util.Date());
-                java.util.ArrayList alDTL = FWCMSOnline.getFWCMSONLINEDTLList(FWCMS_UUID);
-                boolean allIssued = alDTL.size() > 0;
-                for (int iD = 0; iD < alDTL.size(); iD++)
-                {
-                    java.util.Hashtable htDTL = (java.util.Hashtable) alDTL.get(iD);
-                    String sInsType = (String) htDTL.get("INSURANCE_TYPE");
-                    String sCNCODE  = (String) htDTL.get("CNCODE");
-                    boolean alreadyIssued = "ISSUED".equals((String) htDTL.get("INS_STATUS"))
-                        && !sCNCODE.equals("") && !sCNCODE.startsWith("MCK");
-                    if (alreadyIssued) continue;
-
-                    try
-                    {
-                        String sResult = FWCMSOnline.issueMainTables(FWCMS_UUID, sInsType, SESUSERID);
-                        System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID
-                            + " stage=main-table-issuance INSTYPE=" + sInsType
-                            + " issued CN/POLNO=" + sResult);
-                    }
-                    catch (Exception exIssue)
-                    {
-                        System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID
-                            + " stage=main-table-issuance INSTYPE=" + sInsType
-                            + " FAILED - falling back to mock stamp: " + exIssue.getMessage());
-                        exIssue.printStackTrace();
-                        FWCMSOnline.updateFWCMSONLINEDTLIssued(
-                            "MCK" + sInsType + sMockSuffix,          /* mock CNCODE    */
-                            "MCKPOL" + sInsType + sMockSuffix,       /* mock POLICY_NO */
-                            sMockIssDate, SESUSERID, FWCMS_UUID, sInsType);
-                    }
-                }
-                /* journey outcome: paid + every product stamped => Success/ISSUED */
-                if (allIssued && !"S".equals((String)htTXN.get("TRANS_STATUS")))
-                {
-                    FWCMSOnline.updateFWCMSONLINETRANSStatus("S", "ISSUED", SESUSERID, FWCMS_UUID);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID + " stage=mock-payment-status-stamp FAILED");
-            ex.printStackTrace();
-        }
-        finally
-        {
-            FWCMSOnline.takeDown();
-        }
-    }
 
     /* ── Issued Policies (MAIN class tables) ────────────────────────
        The table below shows the real issued documents. The online DTL
