@@ -516,21 +516,28 @@
 				privacyClausePdf = "";
 			}
 
-			/* The Guarantee Letter (FWIG_GL) does NOT carry the Important
-			   Notice — it is a guarantee addressed to Immigration, not a
-			   policy sold to the employer. The policy schedules (FWIG_SCH /
-			   FWHS_SCH) keep it. */
-			boolean includeImportantNotice = !DOC.equals("FWIG_GL");
+			/* Important Notice placement, per document:
+			   - FWIG_SCH: NOT merged here — the schedule template embeds the
+			     pop_incl_f2 port (pop_fwcms_important_notice_print.jsp) as a
+			     jsp:include after a plain PAGEBREAK, exactly where the legacy
+			     pop_cn_FWIG_SCH_preview.jsp includes pop_incl_f2.jsp, so the
+			     notice already travels inside the rendered body above.
+			   - FWIG_GL: does NOT carry the Important Notice — it is a
+			     guarantee addressed to Immigration, not a policy sold to the
+			     employer.
+			   - FWHS_SCH: keeps the appendix loopback below until its
+			     document template exists to embed the include itself. */
+			boolean includeImportantNotice = DOC.equals("FWHS_SCH");
 
-			/* Important Notice: like the Privacy Clause, it is not a static
-			   PDF in the legacy EASC app - it is the JSP include pop_incl_f2.jsp
-			   (FWIG_SCH check_ind="Y", FWHS_SCH check_ind="H", identical FMOS/
-			   BNMLINK/PIDM notice). Loop back to pop_fwcms_important_notice_
-			   print.jsp, rasterise it with the Liberty letterhead, and hand the
-			   rendered PDF to mergeAppendix for the Important Notice slot. There
-			   is NO static fallback (Important_Notice.pdf is retired), so a
-			   render failure here is fatal - the outer catch shows the friendly
-			   error page and the policy is never streamed without its notice. */
+			/* Important Notice (FWHS_SCH only - see the placement note above):
+			   like the Privacy Clause, it is not a static PDF in the legacy
+			   EASC app - it is the JSP include pop_incl_f2.jsp (check_ind="H"
+			   for FWHS). Loop back to pop_fwcms_important_notice_print.jsp,
+			   rasterise it with the Liberty letterhead, and hand the rendered
+			   PDF to mergeAppendix for the Important Notice slot. There is NO
+			   static fallback (Important_Notice.pdf is retired), so a render
+			   failure here is fatal - the outer catch shows the friendly error
+			   page and the policy is never streamed without its notice. */
 			String importantNoticePdf = "";
 			if (includeImportantNotice)
 			{

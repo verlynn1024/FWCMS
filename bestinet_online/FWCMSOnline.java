@@ -2546,10 +2546,11 @@ public class FWCMSOnline extends DB_Contact{
 	   the policy is never streamed without its notice.
 
 	   includeImportantNotice=false drops the Important Notice from the front
-	   of the appendix. The FWIG Guarantee Letter does NOT carry the Important
-	   Notice (it is a guarantee to Immigration, not a policy sold to the
-	   employer), so gen_fwcms_pdf.jsp passes false for FWIG_GL; the policy
-	   schedules (FWIG_SCH / FWHS_SCH) pass true and keep it. The Privacy
+	   of the appendix. gen_fwcms_pdf.jsp passes true only for FWHS_SCH: the
+	   FWIG Guarantee Letter does not carry the notice at all, and the FWIG
+	   Policy Schedule embeds the pop_incl_f2 include inside its own body
+	   (pop_fwcms_FWIG_SCH_print.jsp), matching the legacy preview, so it
+	   arrives here already part of the rendered document. The Privacy
 	   Clause / Privacy Notice (Eng) / Privacy Notice (BM) always follow. */
 	public void mergeAppendix(String filename, String bannerPath, String cutOff, String privacyClausePdf,
 			String importantNoticePdf, boolean includeImportantNotice) throws Exception{
