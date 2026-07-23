@@ -34,7 +34,10 @@
           rendering this body with a per-page header + footer.
         - FWCMSOnline.mergeAppendix merges the Important Notice and the
           privacy documents onto the stream afterwards (appendixRequired =
-          true, includeImportantNotice = true for FWIG_SCH).
+          true, includeImportantNotice = true for FWIG_SCH). The Important
+          Notice is JSP-generated, never a static PDF: gen_fwcms_pdf.jsp
+          loops back to pop_fwcms_important_notice_print.jsp (the
+          pop_incl_f2 port) and hands the rendered PDF to mergeAppendix.
 
      This template therefore emits TWO body sections split by a plain
      <PAGEBREAK></PAGEBREAK>: the schedule (premium box, worker listing,
