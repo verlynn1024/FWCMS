@@ -275,9 +275,15 @@
                  submitted). The Bestinet-supplied branch is pre-selected; if it
                  isn't in the master list it is injected (with its resolved
                  description) so the real selection still shows. -->
+            <%-- Required only when the Bestinet enquiry carried no branch — the
+                 agent must then pick one before payment so it can be inserted
+                 into the FWIG main tables (pop_fwcms_worker_detail_rep.jsp).
+                 When Bestinet already supplied a branch it is pre-selected and
+                 the field is optional. --%>
             <div class="lb-meta-row mt-2">
-                <span class="lb-meta-label"><i class="bi bi-geo-alt me-1"></i>Immigration Details</span>
-                <select class="form-select form-select-sm" id="selImmigration" name="selImmigration" style="max-width:360px;font-size:.8rem;">
+                <span class="lb-meta-label"><i class="bi bi-geo-alt me-1"></i>Immigration Details<%= immiCode.equals("") ? " <span style=\"color:#DC2626;\">*</span>" : "" %></span>
+                <select class="form-select form-select-sm" id="selImmigration" name="selImmigration"
+                        data-required="<%= immiCode.equals("") ? "1" : "0" %>" style="max-width:360px;font-size:.8rem;">
                     <option value="">-- Select Immigration Details --</option>
 <%
     /* Render each master-list branch as "code - description"; the option value

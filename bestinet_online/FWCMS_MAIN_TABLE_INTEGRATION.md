@@ -1,7 +1,8 @@
 # FWCMS Main-Table Integration — Bestinet Online Portal
 
-**Status:** implemented (issuance wired into the payment-result flow, with a mock
-fallback for environments where the cover-note series is not yet seeded).
+**Status:** implemented (issuance runs **before** the payment gateway, in the
+worker-detail data-handling endpoint `pop_fwcms_worker_detail_rep.jsp`, with a
+mock fallback for environments where the cover-note series is not yet seeded).
 
 ## 1. The problem this solves
 
@@ -56,8 +57,9 @@ the inserts are done by `DB_FWIG` / `DB_FWHS` during "Save cover note".
 | 3 | `TB_FWIGMAST` | `Insert_FWIGMAST()` | `^`-delimited worker & nationality-summary lists; `UKEY2 = UKEY` |
 | 4 | `TB_FWIGSCH` | `Insert_FWIGSCH_CFMKT()` | premium schedule + `FWCMSREFNO` / `STAMP_FEES` |
 
-Cover-note number: `getCoverNoteNo(PRINCIPLE, ACCODE, TABLE, FIELD)` — pulls the
-next free number from a pre-seeded pool and marks it `DELETED='Y'`.
+Cover-note number: `getFWorkerNo(PRINCIPLE, ACCODE, ISSDATE)` — increments the
+per-agent, per-year `TB_FWORKERNO_RUNNO` counter (auto-seeding it on first use)
+and formats `YY` + 6-digit running number for this principal.
 
 ### FWHS (Hospitalisation Scheme) — `DB_FWHS`
 
@@ -103,12 +105,34 @@ FWCMS → eCover
   Check split policy
   Calculate premium
   Display premium
-  ── (payment confirmed) ──────────────────────────────
-  Insert into existing MAIN tables   ◄── NEW
-  Insert XML transaction records     ◄── (online DTL stamped with real CN)
-  Generate cover note                ◄── real CNCODE / POLNO
-  Proceed to printing                ◄── now reads a real class-table policy
+  ── worker-detail page → "Make Payment" ──────────────
+  POST pop_fwcms_worker_detail_rep.jsp (BEFORE the gateway):
+    Stamp chosen immigration branch onto TB_FWCMS_ONLINE
+    Insert into existing MAIN tables   ◄── NEW (pre-payment)
+    Insert XML transaction records     ◄── (online DTL stamped with real CN)
+    Generate cover note                ◄── real CNCODE / POLNO
+  ── (redirect to payment gateway) ────────────────────
+  ── (payment confirmed, result page) ─────────────────
+  Stamp payment PAID + close journey ISSUED
+  Proceed to printing                ◄── reads a real class-table policy
 ```
+
+This ordering matches the legacy eCover flow, where "Save cover note" (the
+class-table insert) precedes payment. The database insertion is therefore done
+**before** the user enters the payment gateway; the result page only confirms
+the payment leg and closes the journey.
+
+### Immigration branch selection
+
+When the Bestinet enquiry carries no immigration branch (`immigrationBranchCode`
+blank / `"N/A"`), the worker-detail page shows a **required** dropdown of the
+master list (`TB_FWCMS_CODE` `TYPE='IMMI_CODE'`). The chosen branch is submitted
+to `pop_fwcms_worker_detail_rep.jsp`, which resolves its description (and the G7
+`IMMI_ADDRESS` when seeded) and stamps `IMMI_CODE` / `IMMI_DESCP` /
+`IMMI_ADDRESS` onto the journey's `TB_FWCMS_ONLINE` row via
+`updateFWCMSONLINETRANSImmi` / `updateFWCMSONLINETRANSImmiAddress` — **before**
+`issueMainTables` runs, so the branch is carried into the FWIG main tables (the
+Guarantee Letter's addressee reads it from there).
 
 ### Controller: `FWCMSOnline` (thin)
 
@@ -133,14 +157,26 @@ public String issueMainTables(String UUID, String INSTYPE, String USERID)
 4. stamps the generated `CNCODE` / `POLNO` back onto the online DTL row via
    `updateFWCMSONLINEDTLIssued`, preserving the `UUID` linkage.
 
-### Entry point: `pop_fwcms_payment_result.jsp`
+### Entry point: `pop_fwcms_worker_detail_rep.jsp` (before the gateway)
 
-After payment succeeds, the page loops the journey's products and calls
-`FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)` per product. On success the
+The worker-detail page (`pop_fwcms_worker_detail.jsp`) is a pure view; on "Make
+Payment" it POSTs to `pop_fwcms_worker_detail_rep.jsp`, which does all the data
+handling and only then does the page redirect to `pop_fwcms_payment.jsp`. The
+endpoint first stamps the chosen immigration branch (above), then loops the
+journey's products and calls `FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)`
+per product. The loop is idempotent (products already issued with a real,
+non-`MCK` cover note are skipped), so retrying never re-inserts. On success the
 printing module has a real policy to render. If issuance throws (e.g. the
 cover-note series is not seeded in this environment), the product falls back to
 the previous `MCK…` mock stamp so the portal still renders — the `MCK` prefix
 makes fallbacks easy to find and purge.
+
+### Result page: `pop_fwcms_payment_result.jsp` (after the gateway)
+
+The result page no longer inserts into the class tables. Once the (mocked)
+gateway confirms the payment, it only stamps the payment leg PAID
+(`updateFWCMSONLINETRANSPayment`) and closes the journey Success/ISSUED
+(`updateFWCMSONLINETRANSStatus`).
 
 ### Supporting change: `pop_fwcms_capturePremium.jsp`
 
@@ -162,7 +198,7 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
    DB_FWIG / DB_FWHS                           TB_FWCMS_ONLINE_DTL  (tracking)
         │                                       TB_FWCMS_ONLINE_WORKER (tracking)
         │                                          │
-        │                                     payment_result.jsp
+        │                                     worker_detail_rep.jsp (BEFORE gateway)
         │                                       FWCMSOnline.issueMainTables()
         │                                          │  (controller)
         ▼                                          ▼  delegates to beans
@@ -179,6 +215,11 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
   TB_FWHSCN / TB_FWHSSCH / TB_FWHSITEM              │
   TB_TRANSACTION                                    ▼
         │                              updateFWCMSONLINEDTLIssued (real CN/POLNO)
+        │                                            │
+        │                                     ── payment gateway ──
+        │                                            │
+        │                                     payment_result.jsp (AFTER gateway)
+        │                                       PAID stamp + journey ISSUED
         ▼                                            │
    Printing / Enquiry / Cancellation / Endorsement / Reporting
    (both flows now converge on the same class tables)
@@ -186,20 +227,24 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
 
 ## 7. Deployment prerequisites (data, not code)
 
-These are environment seed-data requirements; the code degrades to the mock
-stamp until they are present:
+Both cover-note number generators auto-seed their running-number rows on
+first use, so no manual seeding is required:
 
-1. **FWIG cover-note pool** seeded for `(INSCODE=08, ACCODE)` in the pool table
-   named by `FWIG_CN_POOL_TABLE` / `FWIG_CN_POOL_FIELD` in `FWCMSOnline.java`.
-   Adjust those two constants to this installation's FWIG pool table/field.
-2. **FWHS running number** seeded in `TB_CNSERIES` for `(INSCODE=08,
-   SERIES=ACCODE, CLS=FWHS)`.
+1. **FWIG running number** — `DB_FWIG.getFWorkerNo` reads/increments
+   `TB_FWORKERNO_RUNNO (INSCODE=08, ACCODE, TRANSYR)` and INSERTs the row
+   with counter 1 when absent.
+2. **FWHS running number** — `DB_FWHS.getREFNO` reads/increments
+   `TB_CNSERIES (INSCODE=08, SERIES=ACCODE, CLS=FWHS)` and INSERTs the row
+   with counter 1 when absent.
+
+The code still degrades to the `MCK…` mock stamp if either generator (or any
+class-table insert) throws.
 
 ## 8. Reused legacy methods (no SQL duplicated)
 
 | Concern | Reused method |
 | --- | --- |
-| FWIG cover-note number | `DB_FWIG.getCoverNoteNo()` |
+| FWIG cover-note number | `DB_FWIG.getFWorkerNo()` |
 | FWHS cover-note number | `DB_FWHS.getREFNO()` |
 | Transaction record | `DB_FWIG.insert_transaction()` / `DB_FWHS.insert_transaction()` |
 | FWIG CN header | `DB_FWIG.Insert_FWIGCN()` |

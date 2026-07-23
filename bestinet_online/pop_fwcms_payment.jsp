@@ -2,16 +2,26 @@
 <jsp:useBean id="common" scope="page" class="com.rexit.easc.common" />
 <%
     String SESUSERID	= common.setNullToString((String)session.getAttribute("SESUSERID"));
-	String SESBRUSERID	= common.setNullToString((String)session.getAttribute("SESBRUSERID")); 
-	
+	String SESBRUSERID	= common.setNullToString((String)session.getAttribute("SESBRUSERID"));
+
  	String USERID		= common.setNullToString((String)session.getAttribute("SESUSERID"));
 	String CONTACT_ID       = common.setNullToString((String) session.getAttribute("SES_CONTACT_ID"));
- 
-    if ((SESUSERID.equals("")) || (SESUSERID == null)) 
+
+    if ((SESUSERID.equals("")) || (SESUSERID == null))
     {
-		response.sendRedirect("../login/logout.jsp"); 
+		response.sendRedirect("../login/logout.jsp");
     }
-    
+
+    /* ── Database insertion happens BEFORE this page ────────────────
+       Issuance into the FWCMS MAIN class tables (and persistence of the
+       chosen immigration branch) is done by pop_fwcms_worker_detail_rep.jsp,
+       the data-handling endpoint the worker-detail page POSTs to just before
+       redirecting here. By the time the payment page loads, every product
+       already carries its real cover note / policy number, so this page only
+       collects the card details and forwards to the gateway. The payment leg
+       (PAID stamp) and journey close are applied afterwards, on
+       pop_fwcms_payment_result.jsp. */
+
     /* ── Payment result flag ────────────────────────────────────
        Gateway posts back PAYMENT=Y on approval, PAYMENT=F on decline.
        Default to failure so a missing param never shows a false positive. */
