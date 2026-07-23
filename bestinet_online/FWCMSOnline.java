@@ -2184,7 +2184,6 @@ public class FWCMSOnline extends DB_Contact{
 
 	/* Appendix inventory (design doc section 8), resolved against
 	   configk.prop template_banner_path at merge time. */
-	private static final String APPENDIX_IMPORTANT_NOTICE	= "Important_Notice.pdf";
 	private static final String APPENDIX_PRIVACY_CLAUSE		= "Privacy_Clause.pdf";
 	private static final String APPENDIX_PRIVACY_ENG		= "Privacy_Notice_Eng.pdf";
 	private static final String APPENDIX_PRIVACY_BM			= "Privacy_Notice_BM.pdf";
@@ -2506,23 +2505,22 @@ public class FWCMSOnline extends DB_Contact{
 	   supplied and readable it takes the Privacy Clause slot, so the clause
 	   comes from the JSP rather than a Privacy_Clause.pdf that does not
 	   exist. Passing null / "" (or a missing file) falls back to the static
-	   APPENDIX_PRIVACY_CLAUSE, keeping the old behaviour available. */
-	public void mergeAppendix(String filename, String bannerPath, String cutOff) throws Exception{
-		mergeAppendix(filename, bannerPath, cutOff, null, true);
-	}
+	   APPENDIX_PRIVACY_CLAUSE, keeping the old behaviour available.
 
-	public void mergeAppendix(String filename, String bannerPath, String cutOff, String privacyClausePdf) throws Exception{
-		mergeAppendix(filename, bannerPath, cutOff, privacyClausePdf, true);
-	}
+	   The Important Notice is likewise JSP-rendered (pop_incl_f2.jsp via
+	   pop_fwcms_important_notice_print.jsp) and has NO static fallback —
+	   Important_Notice.pdf is retired. When includeImportantNotice=true the
+	   caller must supply a readable importantNoticePdf or the merge throws,
+	   so a policy is never streamed with a missing notice.
 
-	/* includeImportantNotice=false drops the Important Notice from the front
+	   includeImportantNotice=false drops the Important Notice from the front
 	   of the appendix. The FWIG Guarantee Letter does NOT carry the Important
 	   Notice (it is a guarantee to Immigration, not a policy sold to the
 	   employer), so gen_fwcms_pdf.jsp passes false for FWIG_GL; the policy
 	   schedules (FWIG_SCH / FWHS_SCH) pass true and keep it. The Privacy
 	   Clause / Privacy Notice (Eng) / Privacy Notice (BM) always follow. */
 	public void mergeAppendix(String filename, String bannerPath, String cutOff, String privacyClausePdf,
-			boolean includeImportantNotice) throws Exception{
+			String importantNoticePdf, boolean includeImportantNotice) throws Exception{
 
 		if (cutOff == null) cutOff = "";
 		cutOff = cutOff.trim().toUpperCase();
@@ -2556,9 +2554,17 @@ public class FWCMSOnline extends DB_Contact{
 
 		ArrayList appendixList = new ArrayList();
 		/* Important Notice — first in the appendix, but only when the caller
-		   wants it (the Guarantee Letter omits it). */
+		   wants it (the Guarantee Letter omits it). JSP-rendered only: no
+		   static Important_Notice.pdf fallback exists any more. */
 		if (includeImportantNotice){
-			appendixList.add(bannerPath + "/" + APPENDIX_IMPORTANT_NOTICE);
+			if (importantNoticePdf == null || importantNoticePdf.trim().equals("")
+				|| !new File(importantNoticePdf).exists()){
+				throw new Exception("[FWCMSPRINT] mergeAppendix: Important Notice PDF missing ["
+					+ importantNoticePdf + "] and no static fallback exists");
+			}
+			appendixList.add(importantNoticePdf);
+			System.out.println("[FWCMSPRINT] mergeAppendix: Important Notice from JSP-rendered PDF ["
+				+ importantNoticePdf + "]");
 		}else{
 			System.out.println("[FWCMSPRINT] mergeAppendix: Important Notice OMITTED (includeImportantNotice=false)");
 		}
