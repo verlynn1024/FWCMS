@@ -57,8 +57,9 @@ the inserts are done by `DB_FWIG` / `DB_FWHS` during "Save cover note".
 | 3 | `TB_FWIGMAST` | `Insert_FWIGMAST()` | `^`-delimited worker & nationality-summary lists; `UKEY2 = UKEY` |
 | 4 | `TB_FWIGSCH` | `Insert_FWIGSCH_CFMKT()` | premium schedule + `FWCMSREFNO` / `STAMP_FEES` |
 
-Cover-note number: `getCoverNoteNo(PRINCIPLE, ACCODE, TABLE, FIELD)` — pulls the
-next free number from a pre-seeded pool and marks it `DELETED='Y'`.
+Cover-note number: `getFWorkerNo(PRINCIPLE, ACCODE, ISSDATE)` — increments the
+per-agent, per-year `TB_FWORKERNO_RUNNO` counter (auto-seeding it on first use)
+and formats `YY` + 6-digit running number for this principal.
 
 ### FWHS (Hospitalisation Scheme) — `DB_FWHS`
 
@@ -226,20 +227,24 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
 
 ## 7. Deployment prerequisites (data, not code)
 
-These are environment seed-data requirements; the code degrades to the mock
-stamp until they are present:
+Both cover-note number generators auto-seed their running-number rows on
+first use, so no manual seeding is required:
 
-1. **FWIG cover-note pool** seeded for `(INSCODE=08, ACCODE)` in the pool table
-   named by `FWIG_CN_POOL_TABLE` / `FWIG_CN_POOL_FIELD` in `FWCMSOnline.java`.
-   Adjust those two constants to this installation's FWIG pool table/field.
-2. **FWHS running number** seeded in `TB_CNSERIES` for `(INSCODE=08,
-   SERIES=ACCODE, CLS=FWHS)`.
+1. **FWIG running number** — `DB_FWIG.getFWorkerNo` reads/increments
+   `TB_FWORKERNO_RUNNO (INSCODE=08, ACCODE, TRANSYR)` and INSERTs the row
+   with counter 1 when absent.
+2. **FWHS running number** — `DB_FWHS.getREFNO` reads/increments
+   `TB_CNSERIES (INSCODE=08, SERIES=ACCODE, CLS=FWHS)` and INSERTs the row
+   with counter 1 when absent.
+
+The code still degrades to the `MCK…` mock stamp if either generator (or any
+class-table insert) throws.
 
 ## 8. Reused legacy methods (no SQL duplicated)
 
 | Concern | Reused method |
 | --- | --- |
-| FWIG cover-note number | `DB_FWIG.getCoverNoteNo()` |
+| FWIG cover-note number | `DB_FWIG.getFWorkerNo()` |
 | FWHS cover-note number | `DB_FWHS.getREFNO()` |
 | Transaction record | `DB_FWIG.insert_transaction()` / `DB_FWHS.insert_transaction()` |
 | FWIG CN header | `DB_FWIG.Insert_FWIGCN()` |

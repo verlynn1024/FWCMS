@@ -974,13 +974,6 @@ public class FWCMSOnline extends DB_Contact{
 	   conCommit transaction, rolled back as one unit on any error.
 	   ===================================================================== */
 
-	/* FWIG cover-note pool (DB_FWIG.getCoverNoteNo pulls the next free
-	   number from here and marks it DELETED='Y'). Deployment prerequisite —
-	   adjust these two constants to this installation's FWIG pool
-	   table/field (integration doc section 7). */
-	public static final String FWIG_CN_POOL_TABLE = "TB_FWIGCNOTE";
-	public static final String FWIG_CN_POOL_FIELD = "CNOTENO";
-
 	/* Legacy DAOs held as beans — FWCMSOnline stays a thin controller. */
 	private DB_FWIG dbFWIG = new DB_FWIG();
 	private DB_FWHS dbFWHS = new DB_FWHS();
@@ -1090,11 +1083,15 @@ public class FWCMSOnline extends DB_Contact{
 			dbFWIG.makeConnection();
 			dbFWIG.setAutoCommitOff();
 
-			/* 0. cover-note number from the pre-seeded pool */
-			String CNCODE = dbFWIG.getCoverNoteNo(PRINCIPLE, ACCODE, FWIG_CN_POOL_TABLE, FWIG_CN_POOL_FIELD);
+			/* 0. cover-note number — DB_FWIG.getFWorkerNo increments the
+			      per-agent, per-year TB_FWORKERNO_RUNNO counter (auto-seeding
+			      it on first use) and formats "YY"+6-digit running number for
+			      this principal, exactly as the legacy FWIG save numbers its
+			      cover notes. */
+			String CNCODE = dbFWIG.getFWorkerNo(PRINCIPLE, ACCODE, ISSDATE);
 			if (CNCODE == null || CNCODE.trim().equals("")){
-				throw new Exception("FWIG cover-note pool empty for ACCODE=" + ACCODE
-					+ " (" + FWIG_CN_POOL_TABLE + "." + FWIG_CN_POOL_FIELD + " not seeded)");
+				throw new Exception("FWIG cover-note number generation failed for ACCODE=" + ACCODE
+					+ " (TB_FWORKERNO_RUNNO)");
 			}
 			sUKEY = PRINCIPLE + CNCODE;
 
