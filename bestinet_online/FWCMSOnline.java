@@ -1122,15 +1122,20 @@ public class FWCMSOnline extends DB_Contact{
 			dbFWIG.makeConnection();
 			dbFWIG.setAutoCommitOff();
 
-			/* 0. cover-note number — DB_FWIG.getFWorkerNo increments the
-			      per-agent, per-year TB_FWORKERNO_RUNNO counter (auto-seeding
-			      it on first use) and formats "YY"+6-digit running number for
-			      this principal, exactly as the legacy FWIG save numbers its
-			      cover notes. */
-			String CNCODE = dbFWIG.getFWorkerNo(PRINCIPLE, ACCODE, ISSDATE);
+			/* 0. quotation cover-note number — getCoverNoteFloat2 (inherited
+			      from EASCManager; DB_FWIG extends EASCManager) advances the
+			      non-motor float (TB_NON_FLOAT_TRANS, METHOD=4) and the NM
+			      running number (TB_KIMB_NMRUNNO) and returns SERIES + 7-digit
+			      running number — the exact same quotation cover-note number the
+			      legacy FWHS quotation flow generates
+			      (pop_quoFWHS_pdfpreview_rep.jsp:
+			      DB_FWHS.getCoverNoteFloat2(PRINCIPLE,ACCODE,"SAVE","4","FWHS")).
+			      FWIG shares the method through EASCManager; only CLSTYPE
+			      differs ("FWIG" — still the non-motor "NM" series). */
+			String CNCODE = dbFWIG.getCoverNoteFloat2(PRINCIPLE, ACCODE, "SAVE", "4", "FWIG");
 			if (CNCODE == null || CNCODE.trim().equals("")){
-				throw new Exception("FWIG cover-note number generation failed for ACCODE=" + ACCODE
-					+ " (TB_FWORKERNO_RUNNO)");
+				throw new Exception("FWIG quotation cover-note number generation failed for ACCODE=" + ACCODE
+					+ " (getCoverNoteFloat2 / TB_KIMB_NMRUNNO)");
 			}
 			sUKEY = PRINCIPLE + CNCODE;
 
@@ -1273,10 +1278,17 @@ public class FWCMSOnline extends DB_Contact{
 			dbFWHS.makeConnection();
 			dbFWHS.setAutoCommitOff();
 
-			/* 0. running cover-note number (TB_CNSERIES) -> "ACCODE-n" */
-			String CNCODE = dbFWHS.getREFNO(PRINCIPLE, ACCODE, "FWHS");
+			/* 0. quotation cover-note number — getCoverNoteFloat2 (inherited
+			      from EASCManager; DB_FWHS extends EASCManager) advances the
+			      non-motor float (TB_NON_FLOAT_TRANS, METHOD=4) and the NM
+			      running number (TB_KIMB_NMRUNNO) and returns SERIES + 7-digit
+			      running number, exactly as the legacy FWHS quotation flow
+			      numbers its cover notes (pop_quoFWHS_pdfpreview_rep.jsp:
+			      DB_FWHS.getCoverNoteFloat2(PRINCIPLE,ACCODE,"SAVE","4","FWHS")). */
+			String CNCODE = dbFWHS.getCoverNoteFloat2(PRINCIPLE, ACCODE, "SAVE", "4", "FWHS");
 			if (CNCODE == null || CNCODE.trim().equals("")){
-				throw new Exception("FWHS cover-note series unavailable for ACCODE=" + ACCODE);
+				throw new Exception("FWHS quotation cover-note number generation failed for ACCODE=" + ACCODE
+					+ " (getCoverNoteFloat2 / TB_KIMB_NMRUNNO)");
 			}
 			sUKEY = PRINCIPLE + CNCODE;
 

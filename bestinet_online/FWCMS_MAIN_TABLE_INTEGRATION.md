@@ -59,9 +59,12 @@ the inserts are done by `DB_FWIG` / `DB_FWHS` during "Save cover note".
 | 3 | `TB_FWIGMAST` | `Insert_FWIGMAST()` | `^`-delimited worker & nationality-summary lists; `UKEY2 = UKEY` |
 | 4 | `TB_FWIGSCH` | `Insert_FWIGSCH_CFMKT()` | premium schedule + `FWCMSREFNO` / `STAMP_FEES` |
 
-Cover-note number: `getFWorkerNo(PRINCIPLE, ACCODE, ISSDATE)` — increments the
-per-agent, per-year `TB_FWORKERNO_RUNNO` counter (auto-seeding it on first use)
-and formats `YY` + 6-digit running number for this principal.
+Quotation cover-note number: `getCoverNoteFloat2(PRINCIPLE, ACCODE, "SAVE",
+"4", "FWIG")` — inherited from `EASCManager` (`DB_FWIG extends EASCManager`).
+It advances the non-motor float (`TB_NON_FLOAT_TRANS`, `METHOD=4`) and the NM
+running number (`TB_KIMB_NMRUNNO`, `CLASS='NM'`) and returns `SERIES` + 7-digit
+running number — the same quotation cover-note number the legacy quotation flow
+(`pop_quoFWHS_pdfpreview_rep.jsp`) generates.
 
 ### FWHS (Hospitalisation Scheme) — `DB_FWHS`
 
@@ -72,8 +75,13 @@ and formats `YY` + 6-digit running number for this principal.
 | 3 | `TB_FWHSSCH` | `Insert_FWHSSCH()` | premium schedule + `FWCMSREFNO` |
 | 4 | `TB_FWHSITEM` | `Insert_FWHSITEM(Vector)` | one 25-column row per worker; `UKEY = <UKEY>$1$<seq>` |
 
-Cover-note number: `getREFNO(PRINCIPLE, ACCODE, CLS)` — increments a
-`TB_CNSERIES` running number and returns `ACCODE-<n>`.
+Quotation cover-note number: `getCoverNoteFloat2(PRINCIPLE, ACCODE, "SAVE",
+"4", "FWHS")` — inherited from `EASCManager` (`DB_FWHS extends EASCManager`),
+the exact call the legacy quotation preview uses. Advances the non-motor float
+(`TB_NON_FLOAT_TRANS`, `METHOD=4`) and the NM running number
+(`TB_KIMB_NMRUNNO`, `CLASS='NM'`) and returns `SERIES` + 7-digit running number.
+FWIG and FWHS share the one `EASCManager` generator (only `CLSTYPE` differs), so
+both classes are numbered from the same quotation series.
 
 ### Reference / supporting tables
 
@@ -170,23 +178,33 @@ pre-gateway data handling and only then does the page redirect to
 `pop_fwcms_payment.jsp`. The endpoint stamps the chosen immigration branch onto
 the journey's `TB_FWCMS_ONLINE` tracking row (above) so it is available when the
 quotation is later issued. It **no longer** issues the quotation — the
-`FWCMSOnline.issueMainTables` loop was moved out of this endpoint to the payment
-result page, so no `CNCODE` and no class-table rows exist until payment succeeds.
+`FWCMSOnline.issueMainTables` loop was moved out of this endpoint to the
+post-payment issue-quotation endpoint (`pop_fwcms_issue_quotation.jsp`, included
+by the payment result page), so no `CNCODE` and no class-table rows exist until
+payment succeeds.
 
 ### Result page: `pop_fwcms_payment_result.jsp` (after a successful payment)
 
-Quotation issuance now lives here. When the gateway confirms `PAYMENT` success
-the page, in order: stamps the payment leg PAID
-(`updateFWCMSONLINETRANSPayment`); loops the journey's products and calls
-`FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)` per product — inserting the
-class-table rows and generating the real `CNCODE` via `DB_FWIG` / `DB_FWHS`, then
-stamping it back onto the online DTL row; and finally closes the journey
-Success/ISSUED (`updateFWCMSONLINETRANSStatus`). The loop is idempotent (products
-already issued with a real, non-`MCK` cover note are skipped), so a page reload
-never re-issues or re-numbers. If issuance throws (e.g. the cover-note series is
-not seeded in this environment), the product falls back to a `MCK…` mock stamp so
-the portal still renders — the `MCK` prefix makes fallbacks easy to find and
-purge. A failed payment (`PAYMENT=F`) issues nothing.
+Quotation issuance is triggered from here, after payment succeeds. When the
+gateway confirms `PAYMENT` success the page stamps the payment leg PAID
+(`updateFWCMSONLINETRANSPayment`) and then **includes the dedicated
+issue-quotation endpoint** `pop_fwcms_issue_quotation.jsp` (`<jsp:include>`),
+which performs legs 2 & 3. A failed payment (`PAYMENT=F`) issues nothing.
+
+### Issue-quotation endpoint: `pop_fwcms_issue_quotation.jsp` (new)
+
+The post-payment **main-table issue-quotation call** is factored into its own
+JSP so the result page stays a thin payment view. Reading the journey UUID and
+acting user from the session, it loops the journey's products and calls
+`FWCMSOnline.issueMainTables(UUID, INSTYPE, USERID)` per product — which drives
+`FWIG.java` / `FWHS.java` (`DB_FWIG` / `DB_FWHS`) to insert the class-table rows,
+generate the quotation `CNCODE` via `getCoverNoteFloat2`, and stamp it back onto
+the online DTL row — then closes the journey Success/ISSUED
+(`updateFWCMSONLINETRANSStatus`). The loop is idempotent (products already issued
+with a real, non-`MCK` cover note are skipped), so a page reload never re-issues
+or re-numbers. If issuance throws (e.g. the float / running-number rows are not
+seeded in this environment), the product falls back to a `MCK…` mock stamp so the
+portal still renders — the `MCK` prefix makes fallbacks easy to find and purge.
 
 ### Supporting change: `pop_fwcms_capturePremium.jsp`
 
@@ -239,25 +257,25 @@ User → eCover JSP                          Bestinet → check_fwcms_online.jsp
 
 ## 7. Deployment prerequisites (data, not code)
 
-Both cover-note number generators auto-seed their running-number rows on
-first use, so no manual seeding is required:
+Both FWIG and FWHS use the one `EASCManager.getCoverNoteFloat2` quotation
+generator, which reads/increments two rows per principal:
 
-1. **FWIG running number** — `DB_FWIG.getFWorkerNo` reads/increments
-   `TB_FWORKERNO_RUNNO (INSCODE=08, ACCODE, TRANSYR)` and INSERTs the row
-   with counter 1 when absent.
-2. **FWHS running number** — `DB_FWHS.getREFNO` reads/increments
-   `TB_CNSERIES (INSCODE=08, SERIES=ACCODE, CLS=FWHS)` and INSERTs the row
-   with counter 1 when absent.
+1. **Non-motor float** — `TB_NON_FLOAT_TRANS (INSCODE, ACCODE, METHOD=4)`.
+2. **NM running number** — `TB_KIMB_NMRUNNO (INSCODE, CLASS='NM')`, whose
+   `SERIES` + 7-digit `RUNNO` form the cover-note number.
 
-The code still degrades to the `MCK…` mock stamp if either generator (or any
-class-table insert) throws.
+Unlike the legacy running-number counters, `getCoverNoteFloat2` does **not**
+auto-seed these rows — both must exist for the principal/class before issuance.
+When either row is missing (or any class-table insert throws) the code degrades
+to the `MCK…` mock stamp so the portal still renders; the `MCK` prefix makes
+fallbacks easy to find and purge.
 
 ## 8. Reused legacy methods (no SQL duplicated)
 
 | Concern | Reused method |
 | --- | --- |
-| FWIG cover-note number | `DB_FWIG.getFWorkerNo()` |
-| FWHS cover-note number | `DB_FWHS.getREFNO()` |
+| FWIG quotation cover-note number | `DB_FWIG.getCoverNoteFloat2()` (from `EASCManager`) |
+| FWHS quotation cover-note number | `DB_FWHS.getCoverNoteFloat2()` (from `EASCManager`) |
 | Transaction record | `DB_FWIG.insert_transaction()` / `DB_FWHS.insert_transaction()` |
 | FWIG CN header | `DB_FWIG.Insert_FWIGCN()` |
 | FWIG worker/summary master | `DB_FWIG.Insert_FWIGMAST()` |
