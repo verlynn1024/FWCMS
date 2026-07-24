@@ -1032,6 +1032,16 @@ public class FWCMSOnline extends DB_Contact{
 	   skipped and its existing key returned. Returns the class-table UKEY
 	   stamped onto the DTL row (the printing module's linkage). */
 	public String issueMainTables(String UUID, String INSTYPE, String USERID) throws Exception{
+		return issueMainTables(UUID, INSTYPE, USERID, "");
+	}
+
+	/* Same as above, but stamps FWCMSREF as the schedule's FWCMS reference
+	   number (TB_FWIGSCH / TB_FWHSSCH FWCMSREFNO). The post-payment quotation
+	   generator (FWCMSQuotation) passes the reusable running number (Q00001…)
+	   here so the issued schedule carries the quotation reference; a blank
+	   FWCMSREF falls back to the journey's Bestinet ITR reference (legacy
+	   behaviour), so the original 3-arg entry point is unchanged. */
+	public String issueMainTables(String UUID, String INSTYPE, String USERID, String FWCMSREF) throws Exception{
 
 		Hashtable htTXN = getFWCMSONLINETRANS(UUID);
 		if (htTXN == null) throw new Exception("issueMainTables: journey not found UUID=" + UUID);
@@ -1048,8 +1058,8 @@ public class FWCMSOnline extends DB_Contact{
 		ArrayList alWorkers = getFWCMSONLINEWORKERList(UUID, INSTYPE);
 
 		String UKEY = INSTYPE.equals("I")
-			? issueFWIG(htTXN, htDTL, alWorkers, USERID)
-			: issueFWHS(htTXN, htDTL, alWorkers, USERID);
+			? issueFWIG(htTXN, htDTL, alWorkers, USERID, FWCMSREF)
+			: issueFWHS(htTXN, htDTL, alWorkers, USERID, FWCMSREF);
 
 		/* stamp the linkage back onto the online DTL row (POLICY_NO stays
 		   blank — like the legacy save, the policy number is assigned by a
@@ -1094,7 +1104,7 @@ public class FWCMSOnline extends DB_Contact{
 	/* FWIG — TB_TRANSACTION, TB_FWIGCN, TB_FWIGMAST, TB_FWIGSCH via the
 	   legacy DB_FWIG bean (same methods, same tables as the eCover save:
 	   integration doc section 3). Returns the new UKEY. */
-	private String issueFWIG(Hashtable htTXN, Hashtable htDTL, ArrayList alWorkers, String USERID) throws Exception{
+	private String issueFWIG(Hashtable htTXN, Hashtable htDTL, ArrayList alWorkers, String USERID, String FWCMSREF_OVERRIDE) throws Exception{
 
 		String PRINCIPLE = GL_PRINCIPLE_CODE;
 		String ACCODE    = comm.getKey((String)htTXN.get("ACCODE"), " ");
@@ -1114,7 +1124,10 @@ public class FWCMSOnline extends DB_Contact{
 		double dNETPREM   = toDouble((String)htDTL.get("NET_PREMIUM"));
 		double dSTAXPCT   = backOutPct(dSTAX, dGPREM - dREBATE);
 
-		String FWCMSREF = (String)htDTL.get("BTN_TRANS_REF");
+		/* FWCMS reference number: the post-payment quotation running number
+		   (Q00001…) when supplied, else the journey's Bestinet ITR reference. */
+		String FWCMSREF = nz(FWCMSREF_OVERRIDE);
+		if (FWCMSREF.equals("")) FWCMSREF = (String)htDTL.get("BTN_TRANS_REF");
 		if (FWCMSREF.equals("")) FWCMSREF = (String)htDTL.get("REFNO");
 
 		String sUKEY = "";
@@ -1236,7 +1249,7 @@ public class FWCMSOnline extends DB_Contact{
 	/* FWHS — TB_TRANSACTION, TB_FWHSCN, TB_FWHSSCH, TB_FWHSITEM via the
 	   legacy DB_FWHS bean (integration doc section 3). Returns the new
 	   UKEY. */
-	private String issueFWHS(Hashtable htTXN, Hashtable htDTL, ArrayList alWorkers, String USERID) throws Exception{
+	private String issueFWHS(Hashtable htTXN, Hashtable htDTL, ArrayList alWorkers, String USERID, String FWCMSREF_OVERRIDE) throws Exception{
 
 		String PRINCIPLE = GL_PRINCIPLE_CODE;
 		String ACCODE    = comm.getKey((String)htTXN.get("ACCODE"), " ");
@@ -1256,7 +1269,10 @@ public class FWCMSOnline extends DB_Contact{
 		double dNETPREM = toDouble((String)htDTL.get("NET_PREMIUM"));
 		double dSTAXPCT = backOutPct(dSTAX, dGPREM - dREBATE);
 
-		String FWCMSREF = (String)htDTL.get("BTN_TRANS_REF");
+		/* FWCMS reference number: the post-payment quotation running number
+		   (Q00001…) when supplied, else the journey's Bestinet ITR reference. */
+		String FWCMSREF = nz(FWCMSREF_OVERRIDE);
+		if (FWCMSREF.equals("")) FWCMSREF = (String)htDTL.get("BTN_TRANS_REF");
 		if (FWCMSREF.equals("")) FWCMSREF = (String)htDTL.get("REFNO");
 
 		/* cross-link to the journey's issued FWIG cover note (IG_NO) when

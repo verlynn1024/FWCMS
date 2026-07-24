@@ -6,6 +6,7 @@
 <%@ page language="java" contentType="text/html; charset=UTF-8" pageEncoding="UTF-8" %>
 <jsp:useBean id="common" scope="page" class="com.rexit.easc.common" />
 <jsp:useBean id="FWCMSOnline" scope="page" class="com.rexit.easc.FWCMSOnline" />
+<jsp:useBean id="FWCMSQuotation" scope="page" class="com.rexit.easc.FWCMSQuotation" />
 <%-- [TEMP] debug: dump all POST/GET parameter names --%>
 
 <% 
@@ -40,43 +41,49 @@ System.out.println(_sb.toString());
        state is read by the printing pipeline). */
     String FWCMS_UUID = common.setNullToString((String)session.getAttribute("SES_FWCMS_ONLINE_UUID"));
 
-    /* ── [MOCK] Payment leg only — issuance already done pre-payment ──
-       Issuance (the class-table insert) now happens BEFORE the payment
-       gateway, in pop_fwcms_worker_detail_rep.jsp (the data-handling endpoint
-       the worker-detail page POSTs to on "Make Payment"): each product is
-       inserted into the existing FWCMS main tables via
-       FWCMSOnline.issueMainTables there, so by the time this page runs every
-       product already carries its real
-       cover note / policy number (or an MCK- mock stamp if the CN series was
-       not seeded). This page no longer inserts anything into the class
-       tables — it only handles the two post-gateway legs:
+    /* ── Payment success → generate quotation AFTER payment ────────────
+       The insurance quotation (the FWCMS main / "class" tables) is created
+       ONLY here, after the payment is confirmed — the new business rule.
+       Nothing was inserted into the class tables before the gateway; the
+       pre-payment endpoint (pop_fwcms_worker_detail_rep.jsp) now writes only
+       the TB_FWCMS_ONLINE tracking row (chosen immigration branch).
 
-         1. payment  — [MOCK] journey stamped PAID with a MOCKPAY- ref
-                       (updateFWCMSONLINETRANSPayment); the real gateway
-                       callback will supply the true payment reference
-         2. status   — journey closed TRANS_STATUS='S' / PURCHASE_STATUS=
-                       'ISSUED' once the payment is confirmed
-                       (updateFWCMSONLINETRANSStatus)
+       Three legs run on success, in order:
+
+         1. payment    — [MOCK] journey stamped PAID with a MOCKPAY- ref
+                         (updateFWCMSONLINETRANSPayment); the real gateway
+                         callback will supply the true payment reference
+         2. quotation  — the dedicated post-payment generator
+                         FWCMSQuotation.generateQuotation(UUID, USERID) creates,
+                         per product, the quotation running number (Q00001…),
+                         the cover-note number and every quotation table
+                         (FWIG: TB_TRANSACTION/TB_FWIGCN/TB_FWIGMAST/TB_FWIGSCH,
+                          FWHS: TB_TRANSACTION/TB_FWHSCN/TB_FWHSSCH/TB_FWHSITEM),
+                         one commit / rollback per product. This is the
+                         recommended in-process invocation point; a real gateway
+                         callback may instead hit pop_fwcms_generate_quotation.jsp
+                         (both converge on the same FWCMSQuotation logic).
+         3. status     — journey closed TRANS_STATUS='S' / PURCHASE_STATUS=
+                         'ISSUED' once at least one product is really issued
+                         (updateFWCMSONLINETRANSStatus)
 
        EVERY FWCMS document — the FWIG Guarantee Letter included — renders
        from the MAIN class tables (TB_FWIGCN / TB_FWIGSCH / TB_FWIGMAST,
        TB_FWHSCN / …) via FWCMSOnline.getFWIGPrintData / getFWHSPrintData,
        exactly like the legacy eCover previews; the online DTL row supplies
-       only the UUID -> CNCODE linkage. So a product left on the MCK- mock
-       fallback has NO class-table rows and will NOT print — real main-table
-       issuance (done on the payment page) is a hard prerequisite for the
-       print buttons below. PAYMENT=F still previews the failed state without
-       stamping anything.
+       only the UUID -> CNCODE linkage. PAYMENT=F still previews the failed
+       state without stamping or generating anything.
        [REMOVE when the payment gateway callback lands: restore
-       isSuccess = "Y".equalsIgnoreCase(request.getParameter("PAYMENT"))
-       and let the gateway callback supply the payment stamp. The MOCKPAY-
-       payment ref and any MCK- issuance fallbacks make mock-stamped rows
-       easy to find and purge.] */
+       isSuccess = "Y".equalsIgnoreCase(request.getParameter("PAYMENT")) and
+       let the gateway callback supply the payment stamp and trigger
+       generation. The MOCKPAY- payment ref makes mock-stamped rows easy to
+       find and purge.] */
     String paymentFlag = request.getParameter("PAYMENT");
     boolean isSuccess  = !"F".equalsIgnoreCase(paymentFlag);
 
     if (isSuccess && !FWCMS_UUID.equals(""))
     {
+        /* 1. stamp the payment PAID (commits immediately) */
         try
         {
             FWCMSOnline.makeConnection();
@@ -88,24 +95,51 @@ System.out.println(_sb.toString());
                     "MOCKPAY-" + System.currentTimeMillis(), "MOCK_PAY",
                     SESUSERID, FWCMS_UUID);
             }
+        }
+        catch (Exception ex)
+        {
+            System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID + " stage=mock-payment-stamp FAILED");
+            ex.printStackTrace();
+        }
+        finally
+        {
+            FWCMSOnline.takeDown();
+        }
 
-            /* Issuance into the FWCMS main tables already ran pre-payment on
-               pop_fwcms_payment.jsp, so here we only close the journey: once
-               the products exist and the payment is confirmed, stamp the
-               journey Success/ISSUED. */
-            if (htTXN != null)
+        /* 2. generate the quotation now that payment is confirmed. Failures
+              are non-fatal to the page (logged); a product that did not
+              generate simply will not appear in the issued-policies table. */
+        try
+        {
+            FWCMSQuotation.generateQuotation(FWCMS_UUID, SESUSERID);
+        }
+        catch (Exception ex)
+        {
+            System.out.println("[FWCMSQUOT] UUID=" + FWCMS_UUID + " stage=post-payment-generate FAILED");
+            ex.printStackTrace();
+        }
+
+        /* 3. close the journey ISSUED — only when at least one product now
+              carries a real (non-MCK) class-table cover note */
+        try
+        {
+            FWCMSOnline.makeConnection();
+            java.util.Hashtable htTXN = FWCMSOnline.getFWCMSONLINETRANS(FWCMS_UUID);
+            java.util.ArrayList alDTL = FWCMSOnline.getFWCMSONLINEDTLList(FWCMS_UUID);
+            boolean anyIssued = false;
+            for (int iD = 0; iD < alDTL.size(); iD++)
             {
-                java.util.ArrayList alDTL = FWCMSOnline.getFWCMSONLINEDTLList(FWCMS_UUID);
-                boolean allIssued = alDTL.size() > 0;
-                if (allIssued && !"S".equals((String)htTXN.get("TRANS_STATUS")))
-                {
-                    FWCMSOnline.updateFWCMSONLINETRANSStatus("S", "ISSUED", SESUSERID, FWCMS_UUID);
-                }
+                String sCN = common.setNullToString((String)((java.util.Hashtable)alDTL.get(iD)).get("CNCODE"));
+                if (!sCN.equals("") && !sCN.startsWith("MCK")) { anyIssued = true; break; }
+            }
+            if (anyIssued && htTXN != null && !"S".equals((String)htTXN.get("TRANS_STATUS")))
+            {
+                FWCMSOnline.updateFWCMSONLINETRANSStatus("S", "ISSUED", SESUSERID, FWCMS_UUID);
             }
         }
         catch (Exception ex)
         {
-            System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID + " stage=mock-payment-status-stamp FAILED");
+            System.out.println("[FWCMSPRINT] UUID=" + FWCMS_UUID + " stage=journey-issued-stamp FAILED");
             ex.printStackTrace();
         }
         finally
